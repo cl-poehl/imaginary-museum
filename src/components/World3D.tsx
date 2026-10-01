@@ -9,16 +9,19 @@
 // down behind its doorway, turned to run straight on from it. A one-room tour
 // (from an epoch page) is just its hall, entered from its end.
 
+import { useProgress } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import type { Exhibition } from "@/lib/exhibitions";
 import { HALL, framePose, layoutTour, type Layout, type Pose, type Vec3 } from "@/lib/museum-layout";
 import { TASTE } from "@/data/tour";
 import { QUALITY } from "@/lib/quality";
 import type { Tour } from "@/lib/tour";
-import { BAY, DOORS, LOBBY_BOUNDS, LOBBY_START, Lobby, OVERVIEW, TASTE_DOOR } from "./Lobby3D";
-import { Daylight, ExhibitionHall, GlideTo, fovFor, waypoints, type Door, type MuseumProps } from "./Museum3D";
+import { YOURS } from "@/lib/personal-tour";
+import { BAY, DOORS, LOBBY_BOUNDS, LOBBY_START, Lobby, OVERVIEW, TASTE_DOOR, YOURS_DOOR, type YoursState } from "./Lobby3D";
+import { Daylight, ExhibitionHall, GlideTo, LookAround, fovFor, viewer, waypoints, type Door, type MuseumProps } from "./Museum3D";
+import { Veil } from "./LoadingVeil";
 import { TASTE_ROOM, TasteRoom, tasteFrame, type TasteRoomProps } from "./TasteRoom3D";
 
 export type WorldProps = Omit<MuseumProps, "tour" | "index" | "next" | "onLobby"> & {
@@ -38,13 +41,51 @@ export type WorldProps = Omit<MuseumProps, "tour" | "index" | "next" | "onLobby"
   onLobby: () => void;
   /** The pair on the taste room's wall, and what to do with a choice. */
   taste: TasteRoomProps;
+  /** A work hung between the stops that the visitor went to look at, if any. */
+  focus: string | null;
+  /** Whether the visitor's own room is open yet. */
+  yours: YoursState;
 };
 
 
 export function World3D(props: WorldProps) {
   return (
+    <>
+      <World {...props} />
+      <SceneVeil />
+    </>
+  );
+}
+
+/** The veil over the scene, until its first images have loaded. */
+export function SceneVeil() {
+  const { active, progress, total } = useProgress();
+  const [phase, setPhase] = useState<"loading" | "fading" | "gone">("loading");
+  const loaded = total > 0 && !active;
+
+  useEffect(() => {
+    if (phase !== "loading") return;
+    // Lifted once the first images are in, or after a while regardless (a slow connection
+    // can watch the rest arrive).
+    const lift = window.setTimeout(() => setPhase("fading"), loaded ? 250 : 10000);
+    return () => window.clearTimeout(lift);
+  }, [loaded, phase]);
+  useEffect(() => {
+    if (phase !== "fading") return;
+    const gone = window.setTimeout(() => setPhase("gone"), 800);
+    return () => window.clearTimeout(gone);
+  }, [phase]);
+
+  if (phase === "gone") return null;
+  return <Veil progress={loaded ? 100 : progress} fading={phase === "fading"} />;
+}
+
+function World(props: WorldProps) {
+  return (
     <Canvas
       className="!absolute inset-0"
+      // Dragging and pinching look around and zoom, rather than scroll the page.
+      style={{ touchAction: "none" }}
       dpr={[1, QUALITY.dpr]}
       flat
       gl={{ antialias: !QUALITY.lite, powerPreference: "high-performance" }}
@@ -83,7 +124,15 @@ function behind(d: { x: number; z: number; angle: number }, startZ: number): Pla
 }
 const TASTE_PLACE = behind(TASTE_DOOR, 0);
 
-function Scene({ halls, lobby, active, startIn, lobbyView, index, close, onEnter, onLobby, taste, ...rest }: WorldProps) {
+function Scene({ halls, lobby, active, startIn, lobbyView, index, close, onEnter, onLobby, taste, focus, yours, ...rest }: WorldProps) {
+  // Zoomed in on the current work (scrolling or pinching): time for its finest image.
+  const [zoomed, setZoomed] = useState(false);
+  useEffect(() => {
+    viewer.onZoomed = setZoomed;
+    return () => {
+      viewer.onZoomed = null;
+    };
+  }, []);
   // Phones get a taller hang, so the layouts depend on the screen's shape.
   const size = useThree((s) => s.size);
   const aspect = size.width / size.height;
@@ -96,7 +145,7 @@ function Scene({ halls, lobby, active, startIn, lobbyView, index, close, onEnter
       halls.map((h, i) => {
         const layout: Layout = layoutTour(h.tour, portrait);
         // Just behind its doorway, the hall's entrance (its startZ) runs on in the doorway's direction.
-        const place: Place = lobby ? behind(DOORS[i], layout.startZ) : { offset: [0, 0, 0], angle: 0 };
+        const place: Place = lobby ? behind(h.id === YOURS ? YOURS_DOOR : DOORS[i], layout.startZ) : { offset: [0, 0, 0], angle: 0 };
         const doors: Door[] = layout.partitions.map((p) => ({ z: p.z, x: 0, lane: 0.9 }));
         return { ...h, i, layout, place, doors };
       }),
@@ -108,6 +157,9 @@ function Scene({ halls, lobby, active, startIn, lobbyView, index, close, onEnter
   // hall's own coordinates, then set down in the world), or the foyer's doorways.
   const station = current?.layout.stations[index];
   const pose = useMemo<Pose | undefined>(() => {
+    if (current && focus && current.layout.views[focus]) {
+      return poseToWorld(framePose(current.layout.views[focus], aspect, fov, [-HALF, HALF]), current.place);
+    }
     if (current && station) {
       const local =
         close && !station.read && station.close
@@ -121,7 +173,7 @@ function Scene({ halls, lobby, active, startIn, lobbyView, index, close, onEnter
     }
     if (lobby) return framePose(lobbyView < 0 ? OVERVIEW : BAY[lobbyView], aspect, fov, LOBBY_BOUNDS);
     return undefined;
-  }, [current, station, close, aspect, fov, lobby, lobbyView, active, portrait]);
+  }, [current, station, close, aspect, fov, lobby, lobbyView, active, portrait, focus]);
 
   // Arriving: at the front of the foyer, or (opening a tour directly) just before its doorway.
   const start = useMemo<Pose | undefined>(() => {
@@ -173,14 +225,15 @@ function Scene({ halls, lobby, active, startIn, lobbyView, index, close, onEnter
 
   return (
     <>
-      {lobby && <Lobby items={lobby} onEnter={onEnter} />}
+      {lobby && <Lobby items={lobby} yours={yours} onEnter={onEnter} />}
       {lobby && (
         <group position={TASTE_PLACE.offset} rotation-y={TASTE_PLACE.angle}>
           <TasteRoom {...taste} />
         </group>
       )}
       {placed.map((h) => {
-        const next = lobby && h.i < placed.length - 1 ? { name: lobby[h.i + 1].name, go: () => onEnter(h.i + 1) } : undefined;
+        // At the end of an exhibition, the doorway on to the next one.
+        const next = lobby && h.i < lobby.length - 1 ? { name: lobby[h.i + 1].name, go: () => onEnter(h.i + 1) } : undefined;
         return (
           <group key={h.id} position={h.place.offset} rotation-y={h.place.angle}>
             <ExhibitionHall
@@ -194,11 +247,13 @@ function Scene({ halls, lobby, active, startIn, lobbyView, index, close, onEnter
               answers={h.id === active ? rest.answers : NONE}
               next={next}
               onLobby={lobby ? onLobby : undefined}
+              detail={h.id === active && !focus && (close || zoomed)}
             />
           </group>
         );
       })}
       <GlideTo pose={pose} plan={plan} start={start} />
+      <LookAround />
     </>
   );
 }

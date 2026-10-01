@@ -7,15 +7,26 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { yearLabel } from "@/data";
 import { ROUTES, ROUTE_ALIASES, TASTE } from "@/data/tour";
 import { exhibitions } from "@/lib/exhibitions";
+import { Veil } from "./LoadingVeil";
+import { MuseumMap } from "./MuseumMap";
 import { toggleFullscreen } from "@/lib/fullscreen";
+import { playGuide, setSound } from "@/lib/sound";
 import { toggleFavorite } from "@/lib/store";
 import { confidence } from "@/lib/taste";
 import { usePairs } from "@/lib/usePairs";
 import { tooLargeToRead } from "@/lib/museum-layout";
 import { buildTour, type Tour as TourData } from "@/lib/tour";
+import { UNLOCK, YOURS, buildPersonalTour } from "@/lib/personal-tour";
 
 // WebGL only in the browser.
-const World3D = dynamic(() => import("./World3D").then((m) => m.World3D), { ssr: false });
+const World3D = dynamic(() => import("./World3D").then((m) => m.World3D), { ssr: false, loading: () => <Veil /> });
+
+/** The doorways off the entrance hall: the exhibitions, the taste room, your own room. */
+const DOORWAYS = [...ROUTES.map((r) => r.id), TASTE, YOURS];
+const TASTE_DOORWAY = ROUTES.length;
+const YOURS_DOORWAY = ROUTES.length + 1;
+/** The doorways left to right across the foyer: your room, the exhibitions, the taste room. */
+const ORDER = [YOURS_DOORWAY, ...ROUTES.map((_, i) => i), TASTE_DOORWAY];
 
 const PORTRAIT = "(max-aspect-ratio: 1/1)";
 function usePortrait() {
@@ -41,21 +52,59 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
   // The seed varies the tests per visit; "Walk it again" draws a new one.
   const [seed, setSeed] = useState(initialSeed);
 
-  const halls = useMemo(
-    () => (only ? [{ id: only, tour: buildTour({ only, seed }) }] : ROUTES.map((r) => ({ id: r.id, tour: buildTour({ route: r.id, seed }) }))),
-    [only, seed],
-  );
-  const lobby = useMemo(() => (only ? null : exhibitions()), [only]);
   // Links to routes that have since been reorganised open the exhibition that covers them.
   const asked = params.get("route");
   const askedFor = asked ? (ROUTE_ALIASES[asked] ?? asked) : null;
+
+  // The taste room's pair, and choosing between them.
+  const pairs = usePairs();
+  const { pair, decide, stored } = pairs;
+
+  // Your own room, hung from your choices and saved works. It is rehung as they change,
+  // but not while you are in it (saving a work there would move the walls around you).
+  const [hungFrom, setHungFrom] = useState({ history: stored.history, favorites: stored.favorites, ready: pairs.ready });
+  if ((askedFor !== YOURS || !hungFrom.ready) && (hungFrom.history !== stored.history || hungFrom.favorites !== stored.favorites || hungFrom.ready !== pairs.ready)) {
+    setHungFrom({ history: stored.history, favorites: stored.favorites, ready: pairs.ready });
+  }
+  const personal = useMemo(() => (only ? null : buildPersonalTour(hungFrom.history, hungFrom.favorites)), [only, hungFrom]);
+  const yours = { open: Boolean(personal), toGo: Math.max(0, UNLOCK - pairs.model.decided) };
+
+  const exhibitionHalls = useMemo(
+    () => (only ? [{ id: only, tour: buildTour({ only, seed }) }] : ROUTES.map((r) => ({ id: r.id, tour: buildTour({ route: r.id, seed }) }))),
+    [only, seed],
+  );
+  const halls = useMemo(() => (personal ? [...exhibitionHalls, { id: YOURS, tour: personal }] : exhibitionHalls), [exhibitionHalls, personal]);
+  const lobby = useMemo(() => (only ? null : exhibitions()), [only]);
   const inTaste = !only && askedFor === TASTE;
   const active = only ?? (halls.some((h) => h.id === askedFor) ? askedFor : inTaste ? TASTE : null);
   const tour: TourData | null = halls.find((h) => h.id === active)?.tour ?? null;
 
-  // Where you are in the tour; a new exhibition starts from its first room.
-  const [visit, setVisit] = useState({ route: active, index: 0, answers: {} as Record<number, string> });
-  if (visit.route !== active) setVisit({ route: active, index: 0, answers: {} });
+  // Where you are in the tour; a new exhibition starts from its first room, unless the
+  // link says where (?at= a work, or a stop's number).
+  const atParam = params.get("at");
+  const placeOf = useCallback(
+    (t: TourData | null, at: string | null) => {
+      if (!t || !at) return { index: 0, focus: null as string | null };
+      const n = Number(at);
+      if (Number.isInteger(n) && n >= 0 && n < t.steps.length) return { index: n, focus: null };
+      const stop = t.steps.findIndex((s) => s.kind === "work" && s.id === at);
+      if (stop >= 0) return { index: stop, focus: null };
+      const room = t.extras.findIndex((ids) => ids.includes(at));
+      if (room >= 0) return { index: t.steps.findIndex((s) => s.kind === "room" && s.room === room), focus: at };
+      return { index: 0, focus: null };
+    },
+    [],
+  );
+  const [visit, setVisit] = useState(() => ({ route: active, index: placeOf(tour, atParam).index, answers: {} as Record<number, string> }));
+  const [focused, setFocused] = useState<{ key: string; id: string } | null>(() => {
+    const p = placeOf(tour, atParam);
+    return p.focus ? { key: `${active}:${p.index}`, id: p.focus } : null;
+  });
+  if (visit.route !== active) {
+    const p = placeOf(tour, atParam);
+    setVisit({ route: active, index: p.index, answers: {} });
+    setFocused(p.focus ? { key: `${active}:${p.index}`, id: p.focus } : null);
+  }
   const { index, answers } = visit;
   // The hall you started in (opening a tour's link directly).
   const [startIn] = useState(active);
@@ -64,14 +113,13 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
     (to: number) => setVisit((v) => (tour ? { ...v, index: Math.max(0, Math.min(tour.steps.length - 1, to)) } : v)),
     [tour],
   );
-  // The doorways off the entrance hall: the exhibitions, then the taste room.
-  const enter = useCallback((i: number) => window.history.pushState(null, "", `/?route=${ROUTES[i]?.id ?? TASTE}`), []);
+  // Your own room's doorway leads to the taste room until the room is open.
+  const enter = useCallback(
+    (i: number) => window.history.pushState(null, "", `/?route=${DOORWAYS[i === YOURS_DOORWAY && !personal ? TASTE_DOORWAY : i] ?? TASTE}`),
+    [personal],
+  );
   const toLobby = useCallback(() => window.history.pushState(null, "", "/"), []);
-  const doorways = halls.length + 1;
-
-  // The taste room's pair, and choosing between them.
-  const pairs = usePairs();
-  const { pair, decide } = pairs;
+  const doorways = DOORWAYS.length;
 
   // The entrance hall: all its doorways, or one (a phone only has room for one at a time).
   const portrait = usePortrait();
@@ -88,14 +136,110 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
   const toggleClose = useCallback(() => isWork && setClose((c) => ({ key: closeKey, close: c.key === closeKey ? !c.close : true })), [isWork, closeKey]);
   const isClose = close.key === closeKey && close.close;
 
+  // A work between the stops you went to look at; any move along the tour leaves it.
+  const focus = focused?.key === closeKey ? focused.id : null;
+  const visitWork = useCallback(
+    (id: string) => {
+      if (!tour) return;
+      const stop = tour.steps.findIndex((s) => s.kind === "work" && s.id === id);
+      if (stop >= 0) go(stop);
+      else setFocused({ key: closeKey, id });
+    },
+    [tour, go, closeKey],
+  );
+
+  // The address says where you stand, so a link to it opens right here.
+  useEffect(() => {
+    if (!tour || only || !active || active === TASTE) return;
+    const step_ = tour.steps[index];
+    const at = focus ?? (step_?.kind === "work" ? step_.id : String(index));
+    const url = `/?route=${active}&at=${encodeURIComponent(at)}`;
+    if (window.location.pathname + window.location.search !== url) window.history.replaceState(null, "", url);
+  }, [tour, only, active, index, focus]);
+
+  // Going anywhere in the museum (from the map): within this exhibition at once;
+  // to another, by its address (which brings you there, and to the spot).
+  const [mapOpen, setMapOpen] = useState(false);
+  const goTo = useCallback(
+    (route: string, i: number, focusId?: string) => {
+      if (route === active) {
+        setVisit((v) => ({ ...v, index: i }));
+        setFocused(focusId ? { key: `${route}:${i}`, id: focusId } : null);
+      } else window.history.pushState(null, "", `/?route=${route}&at=${encodeURIComponent(focusId ?? String(i))}`);
+    },
+    [active],
+  );
+
+  // A first visit learns it can look around.
+  const [hint, setHint] = useState(false);
+  useEffect(() => {
+    if (!tour) return;
+    try {
+      if (window.localStorage.getItem("pendant:look-hint")) return;
+      window.localStorage.setItem("pendant:look-hint", "1");
+    } catch {
+      return;
+    }
+    const show = window.setTimeout(() => setHint(true), 1500);
+    const hide = window.setTimeout(() => setHint(false), 9000);
+    return () => {
+      window.clearTimeout(show);
+      window.clearTimeout(hide);
+    };
+  }, [tour]);
+
+  // Sharing where you stand.
+  const [toast, setToast] = useState<string | null>(null);
+  const share = useCallback(async () => {
+    const url = window.location.href;
+    try {
+      if (navigator.share) await navigator.share({ title: "Pendant", url });
+      else {
+        await navigator.clipboard.writeText(url);
+        setToast("Link copied");
+        window.setTimeout(() => setToast(null), 2200);
+      }
+    } catch {
+      // Sharing was cancelled.
+    }
+  }, []);
+
+  // Sound: the room tone, and the audio guide for the room you are in (or the passage
+  // on to the next), which plays on as you go round the room's works.
+  const [sound, setSoundOn] = useState(false);
+  const toggleSound = useCallback(() => {
+    setSoundOn(!sound);
+    setSound(!sound);
+  }, [sound]);
+  const guide = useMemo(() => {
+    if (!tour || tour.personal) return null;
+    for (let i = index; i >= 0; i--) {
+      const s = tour.steps[i];
+      if (s.kind === "room") return `/audio/${tour.rooms[s.room].movement}.m4a`;
+      if (s.kind === "bridge") return `/audio/bridge-${tour.rooms[s.room].movement}.m4a`;
+    }
+    return null;
+  }, [tour, index]);
+  useEffect(() => {
+    playGuide(sound ? guide : null);
+  }, [sound, guide]);
+  useEffect(() => () => setSound(false), []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target instanceof Element && e.target.closest("input, textarea")) return;
       // In full screen, Esc belongs to the browser: it leaves full screen, not the room.
       const leave = e.key === "Escape" && !document.fullscreenElement;
-      if (e.key === "f" || e.key === "F") toggleFullscreen();
+      if (e.key === "m" || e.key === "M") setMapOpen((o) => !o);
+      else if (mapOpen) {
+        if (leave) setMapOpen(false);
+        return;
+      } else if (e.key === "f" || e.key === "F") toggleFullscreen();
+      else if (e.key === "s" || e.key === "S") toggleSound();
       else if (tour) {
-        if (e.key === "ArrowRight" || e.key === "Enter" || e.key === " ") go(index + 1);
+        if (leave && focus) setFocused(null);
+        else if (e.key === "ArrowRight" || e.key === "Enter" || e.key === " ") go(index + 1);
         else if (e.key === "ArrowLeft") go(index - 1);
         else if (e.key === "z" || e.key === "Z") toggleClose();
         else if (leave && !only) toLobby();
@@ -112,8 +256,9 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
         else return;
       } else {
         // Left and right step between the doorways, from the middle of the foyer outward.
-        if (e.key === "ArrowLeft") setChosen(Math.max(0, (lobbyView < 0 ? 1 : lobbyView) - 1));
-        else if (e.key === "ArrowRight") setChosen(Math.min(doorways - 1, (lobbyView < 0 ? 1 : lobbyView) + 1));
+        const at = ORDER.indexOf(lobbyView < 0 ? 1 : lobbyView);
+        if (e.key === "ArrowLeft") setChosen(ORDER[Math.max(0, at - 1)]);
+        else if (e.key === "ArrowRight") setChosen(ORDER[Math.min(ORDER.length - 1, at + 1)]);
         else if ((e.key === "Enter" || e.key === " ") && lobbyView >= 0) enter(lobbyView);
         else if (leave && lobbyView >= 0 && !portrait) setChosen(-1);
         else return;
@@ -122,13 +267,12 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tour, go, index, toggleClose, only, toLobby, inTaste, pair, decide, pairs, lobbyView, doorways, enter, portrait]);
+  }, [tour, go, index, toggleClose, only, toLobby, inTaste, pair, decide, pairs, lobbyView, doorways, enter, portrait, focus, mapOpen, toggleSound]);
 
   // Only tests the visitor actually answered count toward the score.
   const answered = tour ? tour.steps.map((s, i) => [s, i] as const).filter(([s, i]) => s.kind === "quiz" && answers[i]) : [];
   const score = answered.filter(([s, i]) => s.kind === "quiz" && answers[i] === (s.format === "work" ? s.correctId : s.answer)).length;
 
-  const { stored } = pairs;
   const saved = step?.kind === "work" && stored.favorites.includes(step.id);
   const unanswered = step?.kind === "quiz" && !answers[index];
 
@@ -152,7 +296,10 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
           setSeed(Math.floor(Math.random() * 1e9));
           setVisit({ route: active, index: 0, answers: {} });
         }}
-        onFindTaste={() => enter(halls.length)}
+        onFindTaste={() => enter(TASTE_DOORWAY)}
+        yours={yours}
+        focus={focus}
+        onVisit={visitWork}
         taste={{
           pair,
           outcome: pairs.outcome,
@@ -174,12 +321,21 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
           </span>
         </span>
         <span className="pointer-events-auto flex shrink-0 gap-5">
+          {!only && (
+            <button onClick={() => setMapOpen((o) => !o)} className="transition-colors hover:text-white">
+              Map <span className="text-white/30 max-md:hidden">M</span>
+            </button>
+          )}
+          <button onClick={toggleSound} className={`transition-colors hover:text-white ${sound ? "text-[#c2ae86]" : ""}`} aria-pressed={sound}>
+            Sound<span className="max-md:hidden"> {sound ? "on" : "off"}</span> <span className="text-white/30 max-md:hidden">S</span>
+          </button>
           <button onClick={toggleFullscreen} className="transition-colors hover:text-white max-md:hidden">
             Full screen <span className="text-white/30">F</span>
           </button>
           {(tour || inTaste) && !only ? (
             <button onClick={toLobby} className="transition-colors hover:text-white">
-              Entrance hall
+              <span className="max-md:hidden">Entrance hall</span>
+              <span className="md:hidden">Hall</span>
             </button>
           ) : only ? (
             <Link href="/" className="transition-colors hover:text-white">
@@ -203,7 +359,22 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
 
       {/* The few controls a visitor needs; everything to read is on the walls. */}
       <div className="label absolute right-4 bottom-7 z-30 flex items-center gap-1 rounded-full bg-black/45 p-1 whitespace-nowrap text-white/70 backdrop-blur-md max-md:right-1/2 max-md:translate-x-1/2 md:right-6">
-        {tour ? (
+        {tour && focus ? (
+          <>
+            <button onClick={() => setFocused(null)} className="rounded-full px-3 py-2 transition-colors hover:text-white">
+              ← Back to the tour
+            </button>
+            <button
+              onClick={() => toggleFavorite(focus)}
+              className={`rounded-full px-3 py-2 transition-colors hover:text-white ${stored.favorites.includes(focus) ? "text-[#c2ae86]" : ""}`}
+            >
+              {stored.favorites.includes(focus) ? "Saved" : "Save"}
+            </button>
+            <button onClick={share} className="rounded-full px-3 py-2 transition-colors hover:text-white">
+              Share
+            </button>
+          </>
+        ) : tour ? (
           <>
             {step?.kind === "work" && (
               <>
@@ -213,6 +384,11 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
                 <button onClick={() => toggleFavorite(step.id)} className={`rounded-full px-3 py-2 transition-colors hover:text-white ${saved ? "text-[#c2ae86]" : ""}`}>
                   {saved ? "Saved" : "Save"}
                 </button>
+                {!only && (
+                  <button onClick={share} className="rounded-full px-3 py-2 transition-colors hover:text-white max-md:hidden">
+                    Share
+                  </button>
+                )}
                 <span className="mx-1 h-4 w-px bg-white/15" />
               </>
             )}
@@ -251,9 +427,14 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
                 {ex.name}
               </button>
             ))}
-            <button onClick={() => enter(halls.length)} className="rounded-full px-3 py-2 text-[#c2ae86] transition-colors hover:text-white">
+            <button onClick={() => enter(TASTE_DOORWAY)} className="rounded-full px-3 py-2 text-[#c2ae86] transition-colors hover:text-white">
               The Taste Room
             </button>
+            {yours.open && (
+              <button onClick={() => enter(YOURS_DOORWAY)} className="rounded-full px-3 py-2 text-[#c2ae86] transition-colors hover:text-white">
+                Your Own Room
+              </button>
+            )}
           </>
         ) : (
           <>
@@ -269,6 +450,22 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
           </>
         )}
       </div>
+
+      {mapOpen && lobby && (
+        <MuseumMap
+          halls={halls}
+          active={active}
+          onGo={goTo}
+          onLobby={toLobby}
+          onTaste={() => enter(TASTE_DOORWAY)}
+          onClose={() => setMapOpen(false)}
+        />
+      )}
+      {(toast || hint) && (
+        <p className="label pointer-events-none absolute bottom-20 left-1/2 z-30 -translate-x-1/2 rounded-full bg-black/55 px-4 py-2 whitespace-nowrap text-white/80 backdrop-blur-md">
+          {toast ?? "Drag to look around · scroll or pinch to look closer · click any work to go to it"}
+        </p>
+      )}
 
       {tour && (
         <div className="absolute inset-x-0 bottom-0 z-30 px-3 pb-1.5 md:px-5">

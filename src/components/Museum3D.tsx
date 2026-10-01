@@ -61,6 +61,10 @@ export type MuseumProps = {
   next?: { name: string; go: () => void };
   /** Back to the entrance hall (exhibitions only; a one-room tour has none). */
   onLobby?: () => void;
+  /** Go to a work seen on the walls (its stop, or a work hung between the stops). */
+  onVisit?: (id: string) => void;
+  /** Looking closely at the current work: worth loading its finest image. */
+  detail?: boolean;
 };
 
 /** The world's light: daylight from the skylights, warm and even, as in a top-lit gallery. */
@@ -255,7 +259,7 @@ const poolTexture = (() => {
   return t;
 })();
 
-function Pictures({ layout, tour, index, answers, onAnswer, onToggleClose, hereZ }: MuseumProps & { layout: Layout; hereZ: number }) {
+function Pictures({ layout, tour, index, answers, onAnswer, onToggleClose, onVisit, detail, hereZ }: MuseumProps & { layout: Layout; hereZ: number }) {
   const step = tour.steps[index];
   const active = new Set(layout.stations[index]?.hung ?? []);
   const trio = step?.kind === "quiz" && step.format === "work" ? step : null;
@@ -274,12 +278,24 @@ function Pictures({ layout, tour, index, answers, onAnswer, onToggleClose, hereZ
           trio && isActive && answered
             ? { text: getMovement(getArtwork(h.id)!.movement)?.name ?? "", color: h.id === trio.correctId ? accent : ink, strong: h.id === trio.correctId }
             : undefined;
-        const onClick = !isActive ? undefined : trio ? (answered ? undefined : () => onAnswer(index, h.id)) : step?.kind === "work" ? onToggleClose : undefined;
+        // The work you're at steps close (or answers a test); any other one, you go to.
+        const onClick = isActive
+          ? trio
+            ? answered
+              ? undefined
+              : () => onAnswer(index, h.id)
+            : step?.kind === "work"
+              ? onToggleClose
+              : undefined
+          : onVisit && index >= 0 && !trio
+            ? () => onVisit(h.id)
+            : undefined;
         return (
           <Picture
             key={`${h.id}-${h.pos[2]}`}
             hung={h}
             load={distance < QUALITY.near}
+            detail={Boolean(detail) && isActive && !trio}
             onClick={onClick}
             label={label}
             portrait={layout.portrait}
@@ -293,12 +309,15 @@ function Pictures({ layout, tour, index, answers, onAnswer, onToggleClose, hereZ
 export function Picture({
   hung,
   load,
+  detail = false,
   onClick,
   label,
   portrait,
 }: {
   hung: Hung;
   load: boolean;
+  /** Looked at closely: load the finest image Wikimedia has, for as long as it lasts. */
+  detail?: boolean;
   onClick?: () => void;
   label?: { text: string; color: string; strong: boolean };
   portrait: boolean;
@@ -309,7 +328,13 @@ export function Picture({
 
   useEffect(() => {
     if (!framed || !load || texture) return;
-    const src = art.image.src.includes("/1280px-") ? art.image.src.replace("/1280px-", QUALITY.image) : art.image.src;
+    // The site's own copy: the larger one only for big works on capable devices.
+    const big = !QUALITY.lite && Math.max(hung.width, hung.height) > 2.5;
+    const src = art.image.hosted
+      ? `${art.image.hosted}-${big ? 1600 : 960}.webp`
+      : art.image.src.includes("/1280px-")
+        ? art.image.src.replace("/1280px-", QUALITY.image)
+        : art.image.src;
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin("anonymous");
     let alive = true;
@@ -319,14 +344,40 @@ export function Picture({
       t.anisotropy = 8;
       setTexture(t);
     };
-    // Fall back to the 1280px rendition if the asked-for one doesn't exist.
+    // Fall back to Wikimedia's 1280px rendition if ours (or the asked-for size) is missing.
     loader.load(src, done, undefined, () => loader.load(art.image.src, done));
     return () => {
       alive = false;
     };
-  }, [framed, load, texture, art.image.src]);
+  }, [framed, load, texture, art.image.src, art.image.hosted, hung.width, hung.height]);
   // Free the image's memory when the picture is let go.
   useEffect(() => () => texture?.dispose(), [texture]);
+
+  // Deep zoom: up close, the original at up to 3840px (1920px on a phone), from Wikimedia;
+  // let go again when you step back.
+  const [fine, setFine] = useState<{ id: string; texture: THREE.Texture } | null>(null);
+  useEffect(() => {
+    if (!framed || !detail) return;
+    const url = finestImage(art.image.src);
+    if (!url) return;
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin("anonymous");
+    let alive = true;
+    let made: THREE.Texture | null = null;
+    const done = (t: THREE.Texture) => {
+      if (!alive) return t.dispose();
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = 8;
+      made = t;
+      setFine({ id: art.id, texture: t });
+    };
+    loader.load(url.sized, done, undefined, () => loader.load(url.original, done));
+    return () => {
+      alive = false;
+      made?.dispose();
+    };
+  }, [framed, detail, art.id, art.image.src]);
+  const shown = detail && fine?.id === art.id ? fine.texture : texture;
 
   const { width: w, height: h } = hung;
   const pointer = usePointerCursor(Boolean(onClick));
@@ -345,14 +396,15 @@ export function Picture({
       {/* The work: framed on the wall, or in its niche. Clicking it steps close (or answers a test). */}
       <group
         onClick={(e) => {
-          if (!onClick) return;
+          // A drag to look around isn't a click.
+          if (!onClick || e.delta > 6) return;
           e.stopPropagation();
           onClick();
         }}
         onPointerOver={pointer.onPointerOver}
         onPointerOut={pointer.onPointerOut}
       >
-        {framed ? <FramedWork hung={hung} texture={texture} /> : <CutOutWork hung={hung} load={load} />}
+        {framed ? <FramedWork hung={hung} texture={shown} /> : <CutOutWork hung={hung} load={load} />}
       </group>
       {label && (
         <WallText
@@ -366,6 +418,17 @@ export function Picture({
       )}
     </group>
   );
+}
+
+/**
+ * The finest rendition of a Wikimedia image worth loading here: a large standard
+ * thumbnail, or the original if it's smaller than that.
+ */
+function finestImage(src: string): { sized: string; original: string } | null {
+  const m = src.match(/^https:\/\/(?:thumb|upload)\.wikimedia\.org\/wikipedia\/commons\/thumb\/(.+?)\/\d+px-[^/]+$/);
+  if (!m) return null;
+  const original = `https://upload.wikimedia.org/wikipedia/commons/${m[1]}`;
+  return { sized: src.replace(/\/\d+px-([^/]+)$/, `/${QUALITY.lite ? 1920 : 3840}px-$1`), original };
 }
 
 /** Pointer cursor over something clickable in the scene. */
@@ -629,6 +692,7 @@ function PanelText({ panel: p, tour, answers, onAnswer, score, onRestart, onFind
           ...(artist?.lifespan ? [{ text: artist.lifespan, font: "sans" as const, size: 0.036 * k, opacity: 0.55, gap: 0.006 }] : []),
           { text: art.title, font: "serif-italic", size: 0.1 * k, lineHeight: 1.1, gap: 0.05 },
           { text: art.year, font: "serif", size: 0.07 * k, opacity: 0.7, gap: 0.005 },
+          ...(tour.notes?.[art.id] ? [{ text: tour.notes[art.id], font: "sans" as const, size: 0.036 * k, tracking: 0.14, caps: true, color: accent, weight: 600, gap: 0.05 }] : []),
           { text: meta, font: "sans", size: 0.034 * k, lineHeight: 1.45, opacity: 0.6, gap: 0.04 },
           { text: art.blurb, font: "sans", size: 0.05 * k, lineHeight: 1.55, opacity: 0.92, gap: 0.08 },
           ...(art.lookCloser
@@ -637,6 +701,25 @@ function PanelText({ panel: p, tour, answers, onAnswer, score, onRestart, onFind
                 { text: art.lookCloser, font: "serif-italic" as const, size: 0.064 * k, lineHeight: 1.35, gap: 0.02 },
               ]
             : []),
+        ]}
+      />
+    );
+  }
+
+  if (p.kind === "caption") {
+    // A work between the stops: just who, what and when, as on a museum wall.
+    const art = getArtwork(p.id!)!;
+    return (
+      <WallText
+        width={p.width}
+        height={p.height}
+        position={at}
+        color={ink}
+        lines={[
+          { text: getArtist(art.artist)?.name ?? art.culture ?? "", font: "sans", size: 0.042 * k, tracking: 0.1, caps: true, opacity: 0.75 },
+          { text: art.title, font: "serif-italic", size: 0.075 * k, lineHeight: 1.12, gap: 0.03 },
+          { text: art.year, font: "sans", size: 0.042 * k, gap: 0.02, opacity: 0.55 },
+          ...(tour.notes?.[art.id] ? [{ text: tour.notes[art.id], font: "sans" as const, size: 0.034 * k, tracking: 0.1, caps: true, color: accent, weight: 600, gap: 0.05 }] : []),
         ]}
       />
     );
@@ -652,8 +735,8 @@ function PanelText({ panel: p, tour, answers, onAnswer, score, onRestart, onFind
       { text: room.name, font: "serif-italic", size: 0.16 * k, lineHeight: 1.08, gap: 0.12 },
     ];
     const summary: Line = { text: room.summary, font: "sans", size: (layout.portrait ? 0.075 : 0.062) * k, lineHeight: 1.55, opacity: 0.92 };
-    const hallmarks: Line[] = [
-      { text: "How to recognise it", font: "sans", size: (layout.portrait ? 0.052 : 0.04) * k, tracking: 0.2, caps: true, color: accent, weight: 600, gap: 0.14 },
+    const hallmarks: Line[] = !room.hallmarks.length ? [] : [
+      { text: tour.personal ? "What you seem to love" : "How to recognise it", font: "sans", size: (layout.portrait ? 0.052 : 0.04) * k, tracking: 0.2, caps: true, color: accent, weight: 600, gap: 0.14 },
       ...room.hallmarks.map((h, i) => ({
         text: h,
         font: "sans" as const,
@@ -729,14 +812,21 @@ function PanelText({ panel: p, tour, answers, onAnswer, score, onRestart, onFind
         color="#efe9dc"
         lines={[
           { text: "Exit", font: "sans", size: 0.07 * k, tracking: 0.35, caps: true, opacity: 0.55 },
-          { text: `You walked from ${yearLabel(first.start)} to ${yearLabel(last.end)}.`, font: "serif-italic", size: 0.3 * k, lineHeight: 1.1, gap: 0.12 },
-          {
-            text: `${n} ${n === 1 ? "room" : "rooms"}${score.total > 0 ? ` · you placed ${score.right} of ${score.total} works in the right room` : ""}.`,
-            font: "sans",
-            size: 0.085 * k,
-            gap: 0.12,
-            opacity: 0.7,
-          },
+          ...(tour.personal
+            ? [
+                { text: "This room changes as your taste does.", font: "serif-italic" as const, size: 0.3 * k, lineHeight: 1.1, gap: 0.12 },
+                { text: "Every choice in the taste room, and every work you save, rehangs it.", font: "sans" as const, size: 0.085 * k, gap: 0.12, opacity: 0.7 },
+              ]
+            : [
+                { text: `You walked from ${yearLabel(first.start)} to ${yearLabel(last.end)}.`, font: "serif-italic" as const, size: 0.3 * k, lineHeight: 1.1, gap: 0.12 },
+                {
+                  text: `${n} ${n === 1 ? "room" : "rooms"}${score.total > 0 ? ` · you placed ${score.right} of ${score.total} works in the right room` : ""}.`,
+                  font: "sans" as const,
+                  size: 0.085 * k,
+                  gap: 0.12,
+                  opacity: 0.7,
+                },
+              ]),
         ]}
       />
       <WallText
@@ -749,7 +839,7 @@ function PanelText({ panel: p, tour, answers, onAnswer, score, onRestart, onFind
         plate={{ stroke: "rgba(239,233,220,0.8)" }}
         padding={0.08}
         onClick={next ? next.go : onFindTaste}
-        lines={[{ text: next ? `Continue to ${next.name}` : "Now find your own taste", font: "sans", size: 0.06 * k, tracking: 0.14, caps: true, weight: 550, fit: true }]}
+        lines={[{ text: next ? `Continue to ${next.name}` : tour.personal ? "Keep choosing" : "Now find your own taste", font: "sans", size: 0.06 * k, tracking: 0.14, caps: true, weight: 550, fit: true }]}
       />
       <WallText
         width={buttonW}
@@ -912,6 +1002,87 @@ export function waypoints(from: THREE.Vector3, to: THREE.Vector3, doors: Door[])
 export const fovFor = (aspect: number) => (aspect < 1 ? 64 : 50);
 
 /**
+ * How the visitor is looking once they've arrived somewhere: turned by dragging,
+ * zoomed by scrolling or pinching. Every new move starts afresh.
+ */
+export const viewer = {
+  moving: true,
+  /** Where the camera faced on arrival; turning is measured from here. */
+  base: new THREE.Quaternion(),
+  yaw: 0,
+  pitch: 0,
+  zoom: 1,
+  onZoomed: null as null | ((zoomed: boolean) => void),
+};
+const ZOOMED = 1.5;
+function setZoom(z: number) {
+  const was = viewer.zoom > ZOOMED;
+  viewer.zoom = Math.min(4, Math.max(1, z));
+  if (was !== viewer.zoom > ZOOMED) viewer.onZoomed?.(viewer.zoom > ZOOMED);
+}
+
+/**
+ * Looking around without moving: drag to turn your head, scroll or pinch to look
+ * closer. Only once you've arrived; the next move turns you back.
+ */
+export function LookAround() {
+  const gl = useThree((s) => s.gl);
+  useEffect(() => {
+    const el = gl.domElement; // (its container has touch-action: none, so gestures reach us)
+    const down = new Map<number, { x: number; y: number }>();
+    let pinch = 0;
+    const onDown = (e: PointerEvent) => {
+      down.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (down.size === 2) {
+        const [a, b] = [...down.values()];
+        pinch = Math.hypot(a.x - b.x, a.y - b.y);
+      }
+    };
+    const onMove = (e: PointerEvent) => {
+      const last = down.get(e.pointerId);
+      if (!last) return;
+      const dx = e.clientX - last.x;
+      const dy = e.clientY - last.y;
+      down.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (viewer.moving) return;
+      if (down.size === 2) {
+        const [a, b] = [...down.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinch > 0) setZoom(viewer.zoom * (d / pinch));
+        pinch = d;
+        return;
+      }
+      // The view follows the hand, a little more slowly when zoomed in.
+      const k = 0.0022 / viewer.zoom;
+      viewer.yaw = Math.min(1.1, Math.max(-1.1, viewer.yaw + dx * k));
+      viewer.pitch = Math.min(0.6, Math.max(-0.6, viewer.pitch + dy * k));
+    };
+    const onUp = (e: PointerEvent) => {
+      down.delete(e.pointerId);
+      pinch = 0;
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (viewer.moving) return;
+      e.preventDefault();
+      setZoom(viewer.zoom * Math.exp(-e.deltaY * 0.0015));
+    };
+    el.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      el.removeEventListener("wheel", onWheel);
+    };
+  }, [gl]);
+  return null;
+}
+
+/**
  * Moves the camera to a pose in one smooth glide along the way `plan` gives
  * (through doorways, never through walls), turning as it goes to face what it
  * came to see. The very first pose is reached from `start`. On arrival it
@@ -971,6 +1142,10 @@ export function GlideTo({
     const step = length < 2.5;
     const cap = length > 40 ? 6 : 3.5;
     const duration = still ? 0.4 : step ? Math.max(1, turn * 0.5) : Math.min(cap, Math.max(1.2, length / 4.5 + turn * 0.25));
+    // A new move: looking around and zooming start afresh.
+    viewer.moving = true;
+    viewer.yaw = viewer.pitch = 0;
+    setZoom(1);
     anim.current = {
       path,
       fromTurn: camera.quaternion.clone(),
@@ -984,15 +1159,22 @@ export function GlideTo({
 
   useFrame((state) => {
     const cam = state.camera as THREE.PerspectiveCamera;
-    if (cam.fov !== fov) {
-      cam.fov = fov;
+    // Zooming narrows the view, eased so it never jumps.
+    const wanted = fov / viewer.zoom;
+    if (Math.abs(cam.fov - wanted) > 0.01) {
+      cam.fov += (wanted - cam.fov) * 0.2;
       cam.updateProjectionMatrix();
     }
     const a = anim.current;
     if (!a) return;
     const t = Math.min(1, (performance.now() - a.start) / a.duration);
-    // Standing still once there: nothing moves while you look or read.
-    if (a.arrived) return;
+    // Standing still once there; only the visitor turns the head (dragging) or looks closer.
+    if (a.arrived) {
+      cam.quaternion.copy(viewer.base);
+      if (viewer.yaw) cam.rotateOnWorldAxis(UP, viewer.yaw);
+      if (viewer.pitch) cam.rotateX(viewer.pitch);
+      return;
+    }
     // Easing into a glide within about 0.35 s, and out of it over the last 0.7 s.
     const seconds = a.duration / 1000;
     const k = glide(t, Math.min(0.3, 0.35 / seconds), Math.min(0.45, 0.7 / seconds));
@@ -1009,12 +1191,16 @@ export function GlideTo({
     }
     if (t === 1) {
       a.arrived = true;
+      viewer.base.copy(camera.quaternion);
+      viewer.moving = false;
       latest.current.onArrive?.();
     }
   });
 
   return null;
 }
+
+const UP = new THREE.Vector3(0, 1, 0);
 
 /** The camera's orientation standing at `from`, looking at `at`. */
 function facing(from: THREE.Vector3, at: THREE.Vector3) {

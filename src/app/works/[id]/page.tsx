@@ -45,6 +45,13 @@ export default async function WorkPage(props: PageProps<"/works/[id]">) {
     ...(art.dimensions ? ([["Dimensions", art.dimensions]] as [string, string][]) : []),
     ...(art.culture ? ([["Culture", art.culture]] as [string, string][]) : []),
     ["Collection", art.collection],
+    [
+      "Image",
+      // Its author and licence are on its Wikimedia Commons page.
+      <a key="i" href={art.image.source} target="_blank" rel="noreferrer" className="link">
+        Wikimedia Commons
+      </a>,
+    ],
   ];
 
   return (

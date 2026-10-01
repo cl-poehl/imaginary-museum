@@ -19,7 +19,21 @@ export type Step =
   | { kind: "bridge"; room: number; text: string }
   | { kind: "end" };
 
-export type Tour = { title: string; rooms: (TourRoom & { info: Movement })[]; steps: Step[] };
+export type Tour = {
+  title: string;
+  rooms: (TourRoom & { info: Movement })[];
+  steps: Step[];
+  /** Per room, works hung between the stops: there to look at, never the subject of a test. */
+  extras: string[][];
+  /** Built for one visitor from their taste (lib/personal-tour), rather than a route. */
+  personal?: boolean;
+  /** A line for a work's label: why it was chosen for this visitor. */
+  notes?: Record<string, string>;
+};
+
+/** How many works a room may hang beyond its stops, keeping enough back for its tests. */
+const EXTRAS_PER_ROOM = 4;
+const KEEP_FOR_TESTS = 3;
 
 const byFame = (works: Artwork[]) => [...works].sort((a, b) => b.fame - a.fame);
 
@@ -76,12 +90,18 @@ export function buildTour({ route, only, seed = 1 }: { route?: string | null; on
 
   const testedCount = new Map<string, number>();
   const steps: Step[] = [];
+  const extras: string[][] = [];
   rooms.forEach((r, i) => {
     steps.push({ kind: "room", room: i });
     const forerunners = (r.include ?? []).map((id) => getArtwork(id)).filter((w): w is Artwork => Boolean(w));
     const own = worksIn(r.movement).slice(0, Math.max(WORKS_PER_ROOM, forerunners.length + 2) - forerunners.length);
     // One stop per work: its wall label carries the "look closer" note.
     for (const w of [...forerunners, ...own]) steps.push({ kind: "work", room: i, id: w.id });
+    // A few more of the room's works on its walls, taken out of the test pool first, so
+    // nothing seen here can turn up as a test's answer.
+    const pool_ = spareFor(r.movement);
+    const hang = Math.max(0, Math.min(EXTRAS_PER_ROOM, pool_.length - KEEP_FOR_TESTS));
+    extras.push(pool_.splice(0, hang).map((w) => w.id));
 
     // Rooms the visitor can be tested on: every room visited so far. A single-room
     // tour borrows neighbouring epochs as the other choices.
@@ -97,7 +117,7 @@ export function buildTour({ route, only, seed = 1 }: { route?: string | null; on
     if (r.bridge && i < rooms.length - 1) steps.push({ kind: "bridge", room: i, text: r.bridge });
   });
   steps.push({ kind: "end" });
-  return { title, rooms, steps };
+  return { title, rooms, steps, extras };
 }
 
 function makeQuiz(

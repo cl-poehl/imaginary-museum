@@ -39,13 +39,15 @@ export const DOORS: { x: number; z: number; angle: number }[] = [
 const ANGLED_LENGTH = Math.hypot(W - APSE, W - APSE);
 /** The taste room's doorway, in the right-hand wall near the apse (the room runs on beyond it). */
 export const TASTE_DOOR = { x: W + 0.2, z: -2, angle: -Math.PI / 2 };
+/** Your own room's doorway, opposite, in the left-hand wall. */
+export const YOURS_DOOR = { x: -(W + 0.2), z: -1, angle: Math.PI / 2 };
 
 /** The foyer's floor space, for where the visitor can stand. */
 export const LOBBY_BOUNDS: [number, number] = [-W + 0.5, W - 0.5];
 /** All three doorways and their lettering. */
 export const OVERVIEW: Frame = { centre: [0, 3.6, BACK + 1.5], normal: [0, 0, 1], width: 27.5, height: 7.2 };
-/** One exhibition's doorway and its lettering. */
-export const BAY: Frame[] = [...DOORS, TASTE_DOOR].map((d) => ({
+/** One doorway and its lettering: the exhibitions', the taste room's, your own room's. */
+export const BAY: Frame[] = [...DOORS, TASTE_DOOR, YOURS_DOOR].map((d) => ({
   centre: [d.x, 3.6, d.z],
   normal: [Math.sin(d.angle), 0, Math.cos(d.angle)],
   width: 3.9,
@@ -54,8 +56,11 @@ export const BAY: Frame[] = [...DOORS, TASTE_DOOR].map((d) => ({
 /** Coming in at the front of the foyer. */
 export const LOBBY_START: Pose = { pos: [0, HALL.eye, FRONT - 1], look: [0, 2.6, BACK] };
 
+/** How far the visitor is from their own room: open, or this many choices to go. */
+export type YoursState = { open: boolean; toGo: number };
+
 /** The foyer, its lettering and its works. */
-export function Lobby({ items, onEnter }: { items: Exhibition[]; onEnter: (i: number) => void }) {
+export function Lobby({ items, yours, onEnter }: { items: Exhibition[]; yours: YoursState; onEnter: (i: number) => void }) {
   return (
     <group>
       <Foyer />
@@ -63,6 +68,7 @@ export function Lobby({ items, onEnter }: { items: Exhibition[]; onEnter: (i: nu
         <Bay key={ex.id} ex={ex} index={i} onEnter={onEnter} />
       ))}
       <TasteBay onEnter={() => onEnter(items.length)} />
+      <YoursBay state={yours} onEnter={() => onEnter(items.length + 1)} onTaste={() => onEnter(items.length)} />
       <SideWalls items={items} />
     </group>
   );
@@ -128,7 +134,6 @@ function Foyer() {
   const floor = useMemo(() => new THREE.ShapeGeometry(new THREE.Shape(OUTLINE.map(([x, z]) => new THREE.Vector2(x, -z)))), []);
   const ceiling = useMemo(() => new THREE.ShapeGeometry(new THREE.Shape(OUTLINE.map(([x, z]) => new THREE.Vector2(x, z)))), []);
   const sideLength = FRONT - (BACK + (W - APSE));
-  const sideMid = (FRONT + BACK + (W - APSE)) / 2;
   return (
     <group>
       <mesh rotation-x={-Math.PI / 2} geometry={floor}>
@@ -161,15 +166,11 @@ function Foyer() {
           <meshBasicMaterial color="#e9dfcc" toneMapped={false} />
         </mesh>
       ))}
-      {/* The left wall, plain; the right one opens onto the taste room. */}
-      <mesh position={[-W, H / 2, sideMid]} rotation-y={Math.PI / 2}>
-        <planeGeometry args={[sideLength, H]} />
-        <meshStandardMaterial color={WALL} roughness={0.95} />
-      </mesh>
-      <mesh position={[-(W - 0.02), 0.09, sideMid]}>
-        <boxGeometry args={[0.04, 0.18, sideLength]} />
-        <meshStandardMaterial color="#0f0d0b" />
-      </mesh>
+      {/* The side walls: the left opens onto your own room, the right onto the taste room. */}
+      <group position={[YOURS_DOOR.x, 0, YOURS_DOOR.z]} rotation-y={YOURS_DOOR.angle}>
+        {/* Facing into the foyer, the visitor's left runs toward the entrance, the right toward the apse. */}
+        <WallWithDoor length={sideLength} before={FRONT - YOURS_DOOR.z} after={YOURS_DOOR.z - (BACK + (W - APSE))} />
+      </group>
       <group position={[TASTE_DOOR.x, 0, TASTE_DOOR.z]} rotation-y={TASTE_DOOR.angle}>
         {/* Facing into the foyer, the visitor's left runs toward the apse, the right toward the entrance. */}
         <WallWithDoor length={sideLength} before={TASTE_DOOR.z - (BACK + (W - APSE))} after={FRONT - TASTE_DOOR.z} />
@@ -324,6 +325,84 @@ function TasteBay({ onEnter }: { onEnter: () => void }) {
   );
 }
 
+/** Your own room's doorway: open once the museum knows enough of your taste, until then closed. */
+function YoursBay({ state, onEnter, onTaste }: { state: YoursState; onEnter: () => void; onTaste: () => void }) {
+  const [hover, setHover] = useState(false);
+  const act = state.open ? onEnter : onTaste;
+  return (
+    <group position={[YOURS_DOOR.x, 0, YOURS_DOOR.z]} rotation-y={YOURS_DOOR.angle}>
+      <WallText
+        width={3.6}
+        height={2.9}
+        position={[0, 5.3, 0.21]}
+        align="center"
+        color="#efe9dc"
+        onClick={act}
+        lines={[
+          { text: "Made for you", font: "sans", size: 0.085, tracking: 0.24, caps: true, color: "#cdb88c", weight: 600 },
+          { text: "Your Own Room", font: "serif-italic", size: 0.44, lineHeight: 1.05, gap: 0.08 },
+          {
+            text: state.open
+              ? "Works the museum thinks you will love, each with the choice that led to it, and the works you saved."
+              : "Choose between a few pairs in the taste room, and the museum will hang a room just for you.",
+            font: "sans",
+            size: 0.108,
+            lineHeight: 1.5,
+            gap: 0.14,
+            opacity: 0.88,
+          },
+          {
+            text: state.open ? "It changes as your taste does" : `${state.toGo} ${state.toGo === 1 ? "choice" : "choices"} to go`,
+            font: "sans",
+            size: 0.07,
+            tracking: 0.14,
+            caps: true,
+            gap: 0.14,
+            opacity: 0.6,
+          },
+        ]}
+      />
+      {/* Closed: a pair of doors. */}
+      {!state.open &&
+        [-1, 1].map((s) => (
+          <mesh key={s} position={[(s * DOOR.half) / 2, DOOR.height / 2, -0.05]}>
+            <boxGeometry args={[DOOR.half - 0.02, DOOR.height, 0.08]} />
+            <meshStandardMaterial color="#2b2119" roughness={0.7} />
+          </mesh>
+        ))}
+      <mesh
+        position={[0, DOOR.height / 2, 0.01]}
+        onClick={(e) => {
+          e.stopPropagation();
+          act();
+        }}
+        onPointerOver={() => {
+          setHover(true);
+          document.body.style.cursor = "pointer";
+        }}
+        onPointerOut={() => {
+          setHover(false);
+          document.body.style.cursor = "";
+        }}
+      >
+        <planeGeometry args={[DOOR.half * 2, DOOR.height]} />
+        <meshBasicMaterial color="#fff4e0" transparent opacity={hover ? 0.05 : 0} depthWrite={false} />
+      </mesh>
+      <WallText
+        width={2.4}
+        height={0.4}
+        position={[0, 0.6, 0.25]}
+        align="center"
+        valign="middle"
+        color="#efe9dc"
+        plate={{ stroke: "rgba(239,233,220,0.85)", fill: "rgba(11,10,9,0.55)" }}
+        onClick={act}
+        lines={[{ text: state.open ? "Enter your room" : "First, the taste room", font: "sans", size: 0.11, tracking: 0.16, caps: true, weight: 550 }]}
+      />
+    </group>
+  );
+}
+
 /** Hung to fit within a box, keeping the work's proportions (a sculpture or object in a case on the wall). */
 function fitted(id: string, pos: Vec3, rotY: number, side: -1 | 1, maxH: number, maxW: number): Hung {
   const d = displayFor(id, maxH, maxW, false);
@@ -350,8 +429,8 @@ function SideWalls({ items }: { items: Exhibition[] }) {
     if (i === 1) return;
     const side: -1 | 1 = i === 0 ? -1 : 1;
     rest.forEach((id, j) => {
-      // On the right wall, clear of the taste room's doorway.
-      const z = side === -1 ? [-1.5, 5][j] : [5.5, 12.5][j];
+      // On the side walls, clear of the doorways to the taste room and your own room.
+      const z = [5.5, 12.5][j];
       hung.push(fitted(id, [side * (W - 0.03), 2.3, z], side === -1 ? Math.PI / 2 : -Math.PI / 2, side, 2, 2.6));
     });
   });

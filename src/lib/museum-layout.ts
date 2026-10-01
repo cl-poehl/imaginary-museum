@@ -32,11 +32,13 @@ export type Hung = {
   side: -1 | 1; // -1 left wall, 1 right wall
   room: number;
   mount: Mount;
+  /** Hung between the stops: a work to look at, with a short caption, but no stop of its own. */
+  extra?: boolean;
 };
 
 /** Text on a wall. `pos` is its centre; it faces along the wall's normal. */
 export type Panel = {
-  kind: "label" | "quiz" | "question" | "room" | "room-side" | "bridge" | "end";
+  kind: "label" | "caption" | "quiz" | "question" | "room" | "room-side" | "bridge" | "end";
   pos: Vec3;
   rotY: number;
   width: number;
@@ -72,6 +74,10 @@ export type Layout = {
   endZ: number;
   startZ: number;
   portrait: boolean;
+  /** Where to look to see each work hung between the stops, with its caption. */
+  views: Record<string, Frame>;
+  /** The stop for each work that has one (its first, if it has several). */
+  stopOf: Record<string, number>;
 };
 
 const WALL_X = HALL.halfWidth - 0.03;
@@ -226,7 +232,39 @@ export function layoutTour(tour: Tour, portrait: boolean): Layout {
     return { h, frame: wallFrame(s, z, [work, text]), read: wallFrame(s, z, [edge, text]) };
   };
 
+  // Works between the stops: one after each stop, the rest before the room's test or end.
+  const views: Record<string, Frame> = {};
+  let pending: { room: number; ids: string[] } = { room: -1, ids: [] };
+  const hangExtra = (id: string, room: number) => {
+    const s = nextSide();
+    const d = hallDisplay(id, portrait);
+    const fp = footprintOf(d);
+    if (portrait) {
+      const half = Math.max(fp.width, 1.4) / 2;
+      const z = place(s, -half - 0.4, half + 0.4, 3.4);
+      const y = 2.2 + fp.height / 2;
+      const h = hang(id, s, z, room, 0, y, d);
+      h.extra = true;
+      const caption = { u: 0, y: 1.55, w: 1.4, h: 0.6 };
+      letter({ kind: "caption", id, room }, s, z, caption);
+      views[id] = wallFrame(s, z, [{ u: 0, y, w: fp.width, h: fp.height }, caption]);
+      return;
+    }
+    const captionU = fp.width / 2 + 0.35 + 0.45;
+    const z = place(s, -fp.width / 2 - 0.4, captionU + 0.45 + 0.4, 4);
+    const y = d.mount === "frame" ? Math.max(1.6, fp.height / 2 + 0.45) : Math.max(1.55, fp.height / 2 + 0.3);
+    const h = hang(id, s, z, room, 0, y, d);
+    h.extra = true;
+    const caption = { u: captionU, y: 1.55, w: 0.9, h: 0.75 };
+    letter({ kind: "caption", id, room }, s, z, caption);
+    views[id] = wallFrame(s, z, [{ u: 0, y, w: fp.width, h: fp.height }, caption]);
+  };
+  const flushExtras = () => {
+    while (pending.ids.length) hangExtra(pending.ids.shift()!, pending.room);
+  };
+
   tour.steps.forEach((step, index) => {
+    if (step.kind !== "work") flushExtras();
     if (step.kind === "bridge") {
       // The next room's partition: the passage that leads there is on its right panel.
       const z = newPartition(step.room + 1);
@@ -250,6 +288,7 @@ export function layoutTour(tour: Tour, portrait: boolean): Layout {
       cursor = z - 1.5;
       free[-1] = free[1] = z - 1;
       side = -1;
+      pending = { room: step.room, ids: [...(tour.extras?.[step.room] ?? [])] };
     } else if (step.kind === "work") {
       const seen = shown.get(step.id);
       if (seen) {
@@ -260,6 +299,7 @@ export function layoutTour(tour: Tour, portrait: boolean): Layout {
       const station: Station = { frame, close: closePose(h), read, hung: [h.id] };
       shown.set(step.id, station);
       stations.push(station);
+      if (pending.ids.length) hangExtra(pending.ids.shift()!, pending.room);
     } else if (step.kind === "quiz") {
       if (step.format === "room") {
         const { h, frame, read } = hangWithText(step.id, step.room, "quiz", index);
@@ -313,7 +353,11 @@ export function layoutTour(tour: Tour, portrait: boolean): Layout {
   const segments: Segment[] = sorted.map((p, i) => ({ from: p.z, to: sorted[i + 1]?.z ?? cursor, room: p.room, height: heightOf(p.room) }));
   const startZ = (sorted[0]?.z ?? 0) + 12;
   segments.unshift({ from: startZ, to: sorted[0]?.z ?? cursor, room: -1, height: HALL.height });
-  return { stations, hung, panels, partitions, segments, endZ: cursor, startZ, portrait };
+  const stopOf: Record<string, number> = {};
+  tour.steps.forEach((step, i) => {
+    if (step.kind === "work" && !(step.id in stopOf)) stopOf[step.id] = i;
+  });
+  return { stations, hung, panels, partitions, segments, endZ: cursor, startZ, portrait, views, stopOf };
 }
 
 /**

@@ -6,11 +6,14 @@ export type DisplayImage = { src: string; srcSet?: string; sizes?: string; fallb
 const isWikimedia = (src: string) => /(^|\.)wikimedia\.org\//.test(new URL(src).host + "/");
 
 /**
- * Props for showing an artwork large. Wikimedia serves pre-sized renditions we
- * ask for directly; other museum originals (often 4000px+) go through the
+ * Props for showing an artwork large. The site's own copies come first; failing
+ * those, Wikimedia serves pre-sized renditions we ask for directly; other museum originals (often 4000px+) go through the
  * optimizer. Any failure falls back to the plain URL rather than breaking the page.
  */
 export function displayImage(image: ArtImage, sizes: string): DisplayImage {
+  if (image.hosted) {
+    return { src: `${image.hosted}-1600.webp`, srcSet: `${image.hosted}-960.webp 960w, ${image.hosted}-1600.webp 1600w`, sizes, fallback: image.src };
+  }
   if (isWikimedia(image.src)) return { src: thumb(image, 1920), fallback: image.src };
   try {
     const { props } = getImageProps({ src: image.src, width: image.width, height: image.height, alt: "", sizes, quality: 75 });

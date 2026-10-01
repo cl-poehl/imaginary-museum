@@ -2,13 +2,22 @@ import { ARTISTS, type Artist } from "./artists";
 import { ARTWORK_ENTRIES, type ArtworkEntry } from "./artworks";
 import famous from "./famous.json";
 import images from "./images.json";
+import hosted from "./hosted.json";
 import { MOVEMENTS, type Movement } from "./movements";
 import { WORLD_MOVEMENTS } from "./movements-world";
 
 export type { Artist, Movement };
 export { TRAITS, TRAIT_GROUPS, type TraitGroup } from "./traits";
 
-export type ArtImage = { src: string; thumb?: string; width: number; height: number; source: string };
+export type ArtImage = {
+  src: string;
+  thumb?: string;
+  width: number;
+  height: number;
+  source: string;
+  /** Where the site's own copies live (`<hosted>-400|960|1600.webp`), when it has them. */
+  hosted?: string;
+};
 export type Kind = "painting" | "print" | "drawing" | "sculpture" | "object" | "textile" | "manuscript";
 export type Artwork = ArtworkEntry & {
   image: ArtImage;
@@ -44,7 +53,11 @@ const curated: Artwork[] = ARTWORK_ENTRIES.map((a) => ({
   fame: world.curatedFame[a.id] ?? 20,
 }));
 
-export const artworks: Artwork[] = [...curated, ...world.artworks];
+// Works whose images the site hosts itself (scripts/host-images.mjs) are shown from those copies.
+const HOSTED: Record<string, unknown> = hosted;
+export const artworks: Artwork[] = [...curated, ...world.artworks].map((a) =>
+  a.id in HOSTED ? { ...a, image: { ...a.image, hosted: `/art/${a.id}` } } : a,
+);
 export const artists: Artist[] = [...ARTISTS, ...world.artists].sort((a, b) => a.born - b.born);
 
 // Only epochs that actually hold works in the collection.
@@ -76,6 +89,7 @@ export const artistsInMovement = (id: string) => artists.filter((a) => a.movemen
 // Wikimedia serves fixed thumbnail widths, so swap the width in the URL.
 // Museum images carry their own small rendition in `thumb`.
 export function thumb(image: ArtImage, width: 500 | 960 | 1920 = 500) {
+  if (image.hosted) return `${image.hosted}-${width === 500 ? 400 : width === 960 ? 960 : 1600}.webp`;
   if (image.src.includes("/1280px-")) return image.src.replace("/1280px-", `/${width}px-`);
   return width === 500 ? (image.thumb ?? image.src) : image.src;
 }

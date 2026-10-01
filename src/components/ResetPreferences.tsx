@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { clearStored } from "@/lib/store";
 
-/** Clears everything this browser has stored: picks, saved works, settings, curator notes. */
+/** Clears everything this browser has stored: picks, saved works and settings. */
 export function ResetPreferences() {
   const [done, setDone] = useState(false);
 

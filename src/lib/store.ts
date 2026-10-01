@@ -78,7 +78,7 @@ export function toggleFavorite(id: string) {
   writeStored({ favorites: favorites.includes(id) ? favorites.filter((f) => f !== id) : [...favorites, id] });
 }
 
-/** Forget everything: picks, saved works, settings, and cached curator notes. */
+/** Forget everything: picks, saved works and settings (and notes an earlier version cached). */
 export function clearStored() {
   memory = null;
   try {

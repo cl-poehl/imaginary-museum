@@ -3,7 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Affinity } from "@/components/Affinity";
 import { ArtworkGrid } from "@/components/ArtworkGrid";
-import { CuratorNote } from "@/components/WorkClient";
 import { artists, getArtist, getMovement, worksByArtist } from "@/data";
 
 export function generateStaticParams() {
@@ -50,7 +49,6 @@ export default async function ArtistPage(props: PageProps<"/artists/[id]">) {
       <section className="grid gap-10 py-10 md:grid-cols-[1fr_14rem]">
         <div className="flex flex-col gap-6">
           {artist.bio && <p className="max-w-prose text-[14px] leading-[1.75] text-fg/90">{artist.bio}</p>}
-          <CuratorNote task="artist" id={artist.id} auto={!artist.bio} />
         </div>
         {artist.wiki && (
           <div className="flex flex-col gap-2 text-sm">

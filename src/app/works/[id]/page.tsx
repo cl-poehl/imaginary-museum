@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { FitBadge } from "@/components/Affinity";
 import { ArtworkGrid } from "@/components/ArtworkGrid";
 import { LitArtwork } from "@/components/LitArtwork";
-import { CuratorNote, SaveButton } from "@/components/WorkClient";
+import { SaveButton } from "@/components/WorkClient";
 import { artworks, getArtist, getArtwork, getMovement, similarWorks, TRAITS } from "@/data";
 import { looksLike } from "@/lib/similar";
 import { visitInfo } from "@/lib/visit";
@@ -105,7 +105,6 @@ export default async function WorkPage(props: PageProps<"/works/[id]">) {
             </div>
           )}
 
-          <CuratorNote task="work" id={art.id} auto={!art.blurb} />
         </div>
 
         <aside className="flex flex-col gap-8">

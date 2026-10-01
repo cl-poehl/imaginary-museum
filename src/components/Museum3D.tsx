@@ -494,7 +494,9 @@ function paint(o: {
   const serif = root.getPropertyValue("--font-instrument-serif").trim() || "Georgia, serif";
   const sans = root.getPropertyValue("--font-geist-sans").trim() || "system-ui, sans-serif";
   const pad = o.padding * ppm;
-  const innerW = c.width - pad * 2;
+  // A little room at the sides even without padding, so leaning (italic) letters aren't clipped.
+  const side = Math.max(pad, c.width * 0.02);
+  const innerW = c.width - side * 2;
   const innerH = c.height - pad * 2;
 
   type Row = { text: string; x: number; y: number; line: Line; px: number };
@@ -563,12 +565,12 @@ function paint(o: {
     g.fillStyle = r.line.color ?? o.color;
     g.globalAlpha = r.line.opacity ?? 1;
     g.textAlign = o.align;
-    const x = o.align === "center" ? c.width / 2 : pad + r.x;
+    const x = o.align === "center" ? c.width / 2 : side + r.x;
     const y = top + r.y + r.px * 0.08;
     g.fillText(r.text, x, y);
     if (r.line.bullet) {
       g.beginPath();
-      g.arc(pad + r.px * 0.25, y + r.px * 0.55, r.px * 0.1, 0, Math.PI * 2);
+      g.arc(side + r.px * 0.25, y + r.px * 0.55, r.px * 0.1, 0, Math.PI * 2);
       g.fill();
     }
     if (r.line.strike) {

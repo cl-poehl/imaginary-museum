@@ -127,8 +127,8 @@ function closePose(h: Hung): Pose {
 const hallDisplay = (id: string, portrait: boolean) => displayFor(id, portrait ? 6 : 7.5, portrait ? 5 : 9);
 
 /**
- * Too large to take in together with its label from one spot on this screen:
- * such a work is seen whole, and stepping closer reads the label.
+ * Too large to take in together with a readable label from one spot on this
+ * screen: such a work is seen whole (its label small), and stepping closer reads it.
  */
 export function tooLargeToRead(id: string, portrait: boolean) {
   const fp = footprintOf(hallDisplay(id, portrait));
@@ -204,7 +204,9 @@ export function layoutTour(tour: Tour, portrait: boolean): Layout {
       const text = { u: 0, y: 1.3, w: 1.8, h: 1.7 };
       letter({ kind, id, step, room }, s, z, text);
       const large = tooLargeToRead(id, portrait);
-      return { h, frame: wallFrame(s, z, large ? [work] : [work, text]), read: large ? wallFrame(s, z, [text]) : undefined };
+      // Always the work and its whole label together, so nothing is cut off; a large work's
+      // label can be small from there, and stepping closer reads it.
+      return { h, frame: wallFrame(s, z, [work, text]), read: large ? wallFrame(s, z, [text]) : undefined };
     }
     const textU = fp.width / 2 + 0.4 + 0.55;
     const z = place(s, -fp.width / 2 - 0.4, textU + 0.55 + 0.4, 4.6);
@@ -218,9 +220,10 @@ export function layoutTour(tour: Tour, portrait: boolean): Layout {
     letter({ kind, id, step, room }, s, z, text);
     const large = tooLargeToRead(id, portrait);
     if (!large) return { h, frame: wallFrame(s, z, [work, text]) };
-    // Seen whole; up close, the label and the edge of the work beside it.
+    // Seen whole with its whole label, so nothing is cut off (the label is small from
+    // so far back); up close, the label and the edge of the work beside it.
     const edge = { u: fp.width / 2 - 0.6, y: Math.min(y, 2), w: 1.2, h: Math.min(fp.height, 2.4) };
-    return { h, frame: wallFrame(s, z, [work]), read: wallFrame(s, z, [edge, text]) };
+    return { h, frame: wallFrame(s, z, [work, text]), read: wallFrame(s, z, [edge, text]) };
   };
 
   tour.steps.forEach((step, index) => {

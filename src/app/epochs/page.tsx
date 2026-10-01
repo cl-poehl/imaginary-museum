@@ -26,7 +26,7 @@ export default function EpochsPage() {
           {movements.length} periods, schools and traditions in the collection. Each one links to its story, its artists
           and its works.
         </p>
-        <Link href="/tour" className="label w-fit border border-fg/60 px-5 py-2.5 text-fg transition-colors hover:bg-fg hover:text-bg">
+        <Link href="/" className="label w-fit border border-fg/60 px-5 py-2.5 text-fg transition-colors hover:bg-fg hover:text-bg">
           Take the grand tour
         </Link>
       </header>

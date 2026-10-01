@@ -19,7 +19,7 @@ export function SharedProfile() {
       <div className="flex flex-col items-start gap-6 pt-24">
         <h1 className="font-serif text-[34px] leading-tight">This link doesn&apos;t open</h1>
         <p className="text-muted">It may have been cut off when it was copied.</p>
-        <Link href="/" className="link text-sm">
+        <Link href="/?route=taste" className="link text-sm">
           Find your own taste →
         </Link>
       </div>
@@ -48,7 +48,7 @@ export function SharedProfile() {
         <p className="max-w-3xl text-[15px] leading-[1.8] text-fg/90">
           {summary(model, "they") ?? "Still forming."}
         </p>
-        <Link href="/" className="aurora-bg w-fit rounded-full px-5 py-2.5 text-sm font-medium text-bg transition-opacity hover:opacity-85">
+        <Link href="/?route=taste" className="aurora-bg w-fit rounded-full px-5 py-2.5 text-sm font-medium text-bg transition-opacity hover:opacity-85">
           Find your own taste →
         </Link>
       </header>

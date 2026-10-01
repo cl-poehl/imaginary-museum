@@ -32,7 +32,7 @@ export function FitBadge({ id }: { id: string }) {
   if (model.decided < 5)
     return (
       <Shell>
-        <Link href="/" className="text-faint hover:text-fg">
+        <Link href="/?route=taste" className="text-faint hover:text-fg">
           Make a few picks to see your fit
         </Link>
       </Shell>

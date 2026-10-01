@@ -93,3 +93,17 @@ export function displayFor(id: string, maxH: number, maxW: number, inWall = true
 /** The wall a work takes up: the picture, or its niche's opening. */
 export const footprintOf = (d: { mount: Mount; width: number; height: number }) =>
   d.mount === "frame" ? { width: d.width, height: d.height } : nicheFor(d.width, d.height);
+
+/**
+ * A work made to fill a box, whatever its real size: for two works hung side by
+ * side to be compared on equal terms. A sculpture or object goes in a case.
+ */
+export function fittedTo(id: string, maxH: number, maxW: number): Display {
+  const a = getArtwork(id)!;
+  const cut = CUT_OUTS[id];
+  const aspect = cut?.aspect ?? a.image.width / a.image.height;
+  const h = maxH - (cut ? 0.45 : 0);
+  const w = maxW - (cut ? 0.5 : 0);
+  const height = Math.min(h, w / aspect);
+  return { mount: cut ? "vitrine" : "frame", width: height * aspect, height };
+}

@@ -147,6 +147,9 @@ export const ROUTES: TourRoute[] = [
   },
 ];
 
+/** The taste room, off the entrance hall, as a route (?route=taste). */
+export const TASTE = "taste";
+
 /** Routes that used to exist, and the exhibition that now covers them. */
 export const ROUTE_ALIASES: Record<string, string> = {
   complete: "ancient-worlds",

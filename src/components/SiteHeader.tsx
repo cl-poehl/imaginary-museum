@@ -2,8 +2,8 @@ import Link from "next/link";
 import { TasteCount } from "./TasteCount";
 
 const NAV = [
-  { href: "/", label: "Discover" },
-  { href: "/tour", label: "Tour" },
+  { href: "/", label: "Museum" },
+  { href: "/pairs", label: "Pairs" },
   { href: "/epochs", label: "Epochs", wide: true },
   { href: "/artists", label: "Artists", wide: true },
   { href: "/collection", label: "Collection", wide: true },

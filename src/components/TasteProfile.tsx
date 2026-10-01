@@ -23,7 +23,7 @@ export function TasteProfile() {
         <p className="max-w-md text-muted">
           Your curator learns from the pairs you choose between. A handful of picks is enough for a first read.
         </p>
-        <Link href="/" className="label border border-fg/60 px-6 py-3 text-fg transition-colors hover:bg-fg hover:text-bg">
+        <Link href="/?route=taste" className="label border border-fg/60 px-6 py-3 text-fg transition-colors hover:bg-fg hover:text-bg">
           Start choosing
         </Link>
       </div>

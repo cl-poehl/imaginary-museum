@@ -2,13 +2,15 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { yearLabel } from "@/data";
-import { ROUTES, ROUTE_ALIASES } from "@/data/tour";
+import { ROUTES, ROUTE_ALIASES, TASTE } from "@/data/tour";
 import { exhibitions } from "@/lib/exhibitions";
 import { toggleFullscreen } from "@/lib/fullscreen";
-import { toggleFavorite, useStored } from "@/lib/store";
+import { toggleFavorite } from "@/lib/store";
+import { confidence } from "@/lib/taste";
+import { usePairs } from "@/lib/usePairs";
 import { tooLargeToRead } from "@/lib/museum-layout";
 import { buildTour, type Tour as TourData } from "@/lib/tour";
 
@@ -35,7 +37,6 @@ function usePortrait() {
  * The address follows along (?route=…), so Back walks you out again.
  */
 export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; seed?: number }) {
-  const router = useRouter();
   const params = useSearchParams();
   // The seed varies the tests per visit; "Walk it again" draws a new one.
   const [seed, setSeed] = useState(initialSeed);
@@ -48,7 +49,8 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
   // Links to routes that have since been reorganised open the exhibition that covers them.
   const asked = params.get("route");
   const askedFor = asked ? (ROUTE_ALIASES[asked] ?? asked) : null;
-  const active = only ?? (halls.some((h) => h.id === askedFor) ? askedFor : null);
+  const inTaste = !only && askedFor === TASTE;
+  const active = only ?? (halls.some((h) => h.id === askedFor) ? askedFor : inTaste ? TASTE : null);
   const tour: TourData | null = halls.find((h) => h.id === active)?.tour ?? null;
 
   // Where you are in the tour; a new exhibition starts from its first room.
@@ -62,10 +64,16 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
     (to: number) => setVisit((v) => (tour ? { ...v, index: Math.max(0, Math.min(tour.steps.length - 1, to)) } : v)),
     [tour],
   );
-  const enter = useCallback((i: number) => window.history.pushState(null, "", `/tour?route=${ROUTES[i].id}`), []);
-  const toLobby = useCallback(() => window.history.pushState(null, "", "/tour"), []);
+  // The doorways off the entrance hall: the exhibitions, then the taste room.
+  const enter = useCallback((i: number) => window.history.pushState(null, "", `/?route=${ROUTES[i]?.id ?? TASTE}`), []);
+  const toLobby = useCallback(() => window.history.pushState(null, "", "/"), []);
+  const doorways = halls.length + 1;
 
-  // The entrance hall: both doorways, or one (a phone only has room for one at a time).
+  // The taste room's pair, and choosing between them.
+  const pairs = usePairs();
+  const { pair, decide } = pairs;
+
+  // The entrance hall: all its doorways, or one (a phone only has room for one at a time).
   const portrait = usePortrait();
   const [chosen, setChosen] = useState(-1);
   const lobbyView = portrait && chosen < 0 ? 0 : chosen;
@@ -83,34 +91,44 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const leave = e.key === "Escape" && !document.fullscreenElement; // in full screen, Esc leaves full screen
+      // In full screen, Esc belongs to the browser: it leaves full screen, not the room.
+      const leave = e.key === "Escape" && !document.fullscreenElement;
       if (e.key === "f" || e.key === "F") toggleFullscreen();
       else if (tour) {
         if (e.key === "ArrowRight" || e.key === "Enter" || e.key === " ") go(index + 1);
         else if (e.key === "ArrowLeft") go(index - 1);
         else if (e.key === "z" || e.key === "Z") toggleClose();
-        else if (leave) router.push("/");
+        else if (leave && !only) toLobby();
+        else return;
+      } else if (inTaste) {
+        if (!pair) return;
+        if (e.key === "ArrowLeft") decide(pair[0]);
+        else if (e.key === "ArrowRight") decide(pair[1]);
+        else if (e.key === "ArrowUp") decide(null, "both");
+        else if (e.key === "ArrowDown") decide(null, "neither");
+        else if (e.key === " ") decide(null);
+        else if (e.key === "u" || e.key === "U" || e.key === "Backspace") pairs.undo();
+        else if (leave) toLobby();
         else return;
       } else {
         // Left and right step between the doorways, from the middle of the foyer outward.
         if (e.key === "ArrowLeft") setChosen(Math.max(0, (lobbyView < 0 ? 1 : lobbyView) - 1));
-        else if (e.key === "ArrowRight") setChosen(Math.min(halls.length - 1, (lobbyView < 0 ? 1 : lobbyView) + 1));
+        else if (e.key === "ArrowRight") setChosen(Math.min(doorways - 1, (lobbyView < 0 ? 1 : lobbyView) + 1));
         else if ((e.key === "Enter" || e.key === " ") && lobbyView >= 0) enter(lobbyView);
         else if (leave && lobbyView >= 0 && !portrait) setChosen(-1);
-        else if (leave) router.push("/");
         else return;
       }
       e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tour, go, index, toggleClose, router, lobbyView, portrait, enter, halls.length]);
+  }, [tour, go, index, toggleClose, only, toLobby, inTaste, pair, decide, pairs, lobbyView, doorways, enter, portrait]);
 
   // Only tests the visitor actually answered count toward the score.
   const answered = tour ? tour.steps.map((s, i) => [s, i] as const).filter(([s, i]) => s.kind === "quiz" && answers[i]) : [];
   const score = answered.filter(([s, i]) => s.kind === "quiz" && answers[i] === (s.format === "work" ? s.correctId : s.answer)).length;
 
-  const { stored } = useStored();
+  const { stored } = pairs;
   const saved = step?.kind === "work" && stored.favorites.includes(step.id);
   const unanswered = step?.kind === "quiz" && !answers[index];
 
@@ -134,7 +152,15 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
           setSeed(Math.floor(Math.random() * 1e9));
           setVisit({ route: active, index: 0, answers: {} });
         }}
-        onFindTaste={() => router.push("/")}
+        onFindTaste={() => enter(halls.length)}
+        taste={{
+          pair,
+          outcome: pairs.outcome,
+          insight: pairs.insight?.text ?? null,
+          decided: pairs.model.decided,
+          signal: confidence(pairs.model),
+          onChoose: (id) => decide(id),
+        }}
       />
 
       {/* A whisper of interface: where you are, and the way out. */}
@@ -143,7 +169,7 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
         <span className="min-w-0 truncate">
           <span className="font-serif text-[14px] tracking-normal text-white/80 normal-case">Pendant</span>
           <span className="ml-3">
-            {tour ? tour.title : "Guided tours"}
+            {tour ? tour.title : inTaste ? "The Taste Room" : "Entrance hall"}
             {room && <span className="text-white/30 max-md:hidden"> · {room.info.name}</span>}
           </span>
         </span>
@@ -151,18 +177,26 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
           <button onClick={toggleFullscreen} className="transition-colors hover:text-white max-md:hidden">
             Full screen <span className="text-white/30">F</span>
           </button>
-          {tour && !only && (
+          {(tour || inTaste) && !only ? (
             <button onClick={toLobby} className="transition-colors hover:text-white">
-              Change route
+              Entrance hall
             </button>
-          )}
-          {!tour && (
-            <Link href="/epochs" className="transition-colors hover:text-white max-md:hidden">
-              One-room tours
+          ) : only ? (
+            <Link href="/" className="transition-colors hover:text-white">
+              Museum
             </Link>
+          ) : (
+            <>
+              <Link href="/pairs" className="transition-colors hover:text-white max-md:hidden">
+                Pairs
+              </Link>
+              <Link href="/epochs" className="transition-colors hover:text-white max-md:hidden">
+                Epochs
+              </Link>
+            </>
           )}
-          <Link href="/" className="transition-colors hover:text-white">
-            Leave ✕
+          <Link href="/taste" className="transition-colors hover:text-white">
+            Your taste
           </Link>
         </span>
       </div>
@@ -191,19 +225,43 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
               </button>
             )}
           </>
-        ) : lobbyView < 0 ? (
-          lobby?.map((ex, i) => (
-            <button key={ex.id} onClick={() => enter(i)} className="rounded-full px-3 py-2 transition-colors hover:text-white">
-              {ex.name}
+        ) : inTaste ? (
+          <>
+            <button onClick={() => decide(null, "both")} className="rounded-full px-3 py-2 transition-colors hover:text-white">
+              Both
             </button>
-          ))
+            <button onClick={() => decide(null, "neither")} className="rounded-full px-3 py-2 transition-colors hover:text-white">
+              Neither
+            </button>
+            <button onClick={() => decide(null)} className="rounded-full px-3 py-2 transition-colors hover:text-white">
+              Skip
+            </button>
+            <button
+              onClick={pairs.undo}
+              disabled={stored.history.length === 0}
+              className="rounded-full px-3 py-2 transition-colors hover:text-white disabled:opacity-30"
+            >
+              Undo
+            </button>
+          </>
+        ) : lobbyView < 0 ? (
+          <>
+            {lobby?.map((ex, i) => (
+              <button key={ex.id} onClick={() => enter(i)} className="rounded-full px-3 py-2 transition-colors hover:text-white">
+                {ex.name}
+              </button>
+            ))}
+            <button onClick={() => enter(halls.length)} className="rounded-full px-3 py-2 text-[#c2ae86] transition-colors hover:text-white">
+              The Taste Room
+            </button>
+          </>
         ) : (
           <>
             <button
-              onClick={() => setChosen(portrait ? (lobbyView + 1) % halls.length : -1)}
+              onClick={() => setChosen(portrait ? (lobbyView + 1) % doorways : -1)}
               className="rounded-full px-3 py-2 transition-colors hover:text-white"
             >
-              {portrait ? "Next exhibition" : "← All exhibitions"}
+              {portrait ? "Next doorway" : "← All doorways"}
             </button>
             <button onClick={() => enter(lobbyView)} className="rounded-full bg-white/90 px-4 py-2 text-[#15130f] transition-colors hover:bg-white">
               Enter →
@@ -219,17 +277,20 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
       )}
 
       {/* The same choice for screen readers and without WebGL. */}
-      {!tour && lobby && (
+      {!tour && !inTaste && lobby && (
         <nav className="sr-only">
           <h1>Where shall we begin?</h1>
           <ul>
             {lobby.map((ex) => (
               <li key={ex.id}>
-                <a href={`/tour?route=${ex.id}`}>
+                <a href={`/?route=${ex.id}`}>
                   {ex.name}, {ex.span}. {ex.description}
                 </a>
               </li>
             ))}
+            <li>
+              <a href="/pairs">The Taste Room: choose between two works at a time, and the museum learns your taste.</a>
+            </li>
           </ul>
         </nav>
       )}

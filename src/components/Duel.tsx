@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getArtist, getArtwork, getMovement, type Artwork } from "@/data";
-import { startOver, toggleFavorite, useStored, writeStored } from "@/lib/store";
-import { confidence, insightFor, nextPair, train, type Choice, type Verdict } from "@/lib/taste";
+import { startOver, toggleFavorite, writeStored } from "@/lib/store";
+import { confidence } from "@/lib/taste";
+import { usePairs } from "@/lib/usePairs";
 import { Intro } from "./Intro";
 import { LitArtwork } from "./LitArtwork";
 import { toggleFullscreen } from "@/lib/fullscreen";
@@ -13,53 +14,11 @@ import { Lightbox } from "./Lightbox";
 type PanelState = "idle" | "won" | "lost" | "both" | "neither";
 
 export function Duel() {
-  const { stored, model, ready } = useStored();
-  const [outcome, setOutcome] = useState<{ winner: string | null; verdict?: Verdict } | null>(null);
-  const [insight, setInsight] = useState<{ text: string; key: number } | null>(null);
+  const { stored, model, ready, pair, outcome, insight, decide, undo, clearInsight } = usePairs();
   const [zoomed, setZoomed] = useState<string | null>(null);
   const [intro, setIntro] = useState(false);
-  const busy = useRef(false);
   const showIntro = ready && (intro || !stored.introSeen);
-
-  const pair = stored.current;
   const captions = stored.captions;
-
-  // First visit: nothing stored yet, so seed the opening pair.
-  useEffect(() => {
-    if (ready && !stored.current) writeStored({ current: nextPair(stored.history, model) });
-  }, [ready, stored, model]);
-
-  const decide = useCallback(
-    (winner: string | null, verdict?: Verdict) => {
-      if (!pair || busy.current) return;
-      busy.current = true;
-      const choice: Choice = { a: pair[0], b: pair[1], winner, verdict, at: Date.now() };
-      const history = [...stored.history, choice];
-      const nextModel = train(history, stored.favorites);
-      const informative = Boolean(winner || verdict);
-      if (informative) {
-        setOutcome({ winner, verdict });
-        const text = insightFor(choice, nextModel);
-        setInsight(text ? { text, key: history.length } : null);
-      }
-      window.setTimeout(
-        () => {
-          writeStored({ history, current: nextPair(history, nextModel) });
-          setOutcome(null);
-          busy.current = false;
-        },
-        informative ? 520 : 0,
-      );
-    },
-    [pair, stored.history, stored.favorites],
-  );
-
-  const undo = useCallback(() => {
-    const last = stored.history.at(-1);
-    if (!last || busy.current) return;
-    writeStored({ history: stored.history.slice(0, -1), current: [last.a, last.b] });
-    setInsight(null);
-  }, [stored.history]);
 
   const toggleCaptions = useCallback(() => writeStored({ captions: !captions }), [captions]);
 
@@ -90,7 +49,7 @@ export function Duel() {
   const restart = () => {
     if (window.confirm("Start over? This clears your picks and saved works.")) {
       startOver();
-      setInsight(null);
+      clearInsight();
     }
   };
 

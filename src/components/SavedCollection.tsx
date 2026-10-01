@@ -36,7 +36,7 @@ export function SavedCollection() {
             : "Tap Save under any work you would hang on your own wall. Your curator counts it as a strong signal."}
         </p>
         {!works.length && (
-          <Link href="/" className="aurora-bg mt-2 w-fit rounded-full px-5 py-2.5 text-sm font-medium text-bg">
+          <Link href="/?route=taste" className="aurora-bg mt-2 w-fit rounded-full px-5 py-2.5 text-sm font-medium text-bg">
             Start choosing →
           </Link>
         )}

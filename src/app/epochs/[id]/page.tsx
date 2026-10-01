@@ -39,7 +39,7 @@ export default async function EpochPage(props: PageProps<"/epochs/[id]">) {
         </p>
         <div className="flex flex-wrap items-center gap-5">
           <Link
-            href={`/tour?room=${movement.id}`}
+            href={`/?room=${movement.id}`}
             className="label border border-fg/60 px-5 py-2.5 text-fg transition-colors hover:bg-fg hover:text-bg"
           >
             Tour this room

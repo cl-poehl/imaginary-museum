@@ -54,7 +54,7 @@ export function Intro({ onEnter }: { onEnter: () => void }) {
           >
             Enter the gallery
           </button>
-          <Link href="/tour" className="label text-muted transition-colors hover:text-fg">
+          <Link href="/" className="label text-muted transition-colors hover:text-fg">
             Or take the guided tour first →
           </Link>
         </div>

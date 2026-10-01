@@ -37,13 +37,15 @@ export const DOORS: { x: number; z: number; angle: number }[] = [
   { x: (W + APSE) / 2, z: BACK + (W - APSE) / 2, angle: -Math.PI / 4 },
 ];
 const ANGLED_LENGTH = Math.hypot(W - APSE, W - APSE);
+/** The taste room's doorway, in the right-hand wall near the apse (the room runs on beyond it). */
+export const TASTE_DOOR = { x: W + 0.2, z: -2, angle: -Math.PI / 2 };
 
 /** The foyer's floor space, for where the visitor can stand. */
 export const LOBBY_BOUNDS: [number, number] = [-W + 0.5, W - 0.5];
 /** All three doorways and their lettering. */
 export const OVERVIEW: Frame = { centre: [0, 3.6, BACK + 1.5], normal: [0, 0, 1], width: 27.5, height: 7.2 };
 /** One exhibition's doorway and its lettering. */
-export const BAY: Frame[] = DOORS.map((d) => ({
+export const BAY: Frame[] = [...DOORS, TASTE_DOOR].map((d) => ({
   centre: [d.x, 3.6, d.z],
   normal: [Math.sin(d.angle), 0, Math.cos(d.angle)],
   width: 3.9,
@@ -60,6 +62,7 @@ export function Lobby({ items, onEnter }: { items: Exhibition[]; onEnter: (i: nu
       {items.map((ex, i) => (
         <Bay key={ex.id} ex={ex} index={i} onEnter={onEnter} />
       ))}
+      <TasteBay onEnter={() => onEnter(items.length)} />
       <SideWalls items={items} />
     </group>
   );
@@ -77,14 +80,20 @@ const OUTLINE: [number, number][] = [
   [-W, BACK + (W - APSE)],
 ];
 
-/** A wall with a doorway in its middle, `length` long, built facing +z. */
-function WallWithDoor({ length }: { length: number }) {
-  const side = (length / 2 - DOOR.half) / 2 + DOOR.half;
+/**
+ * A wall with a doorway, built facing +z: `before` and `after` are how far it runs
+ * to either side of the door (to the visitor's left and right, facing it).
+ */
+function WallWithDoor({ length, before = length / 2, after = length / 2 }: { length: number; before?: number; after?: number }) {
+  const pieces = [
+    { x: -(DOOR.half + (before - DOOR.half) / 2), w: before - DOOR.half },
+    { x: DOOR.half + (after - DOOR.half) / 2, w: after - DOOR.half },
+  ];
   return (
     <group>
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * side, H / 2, 0]}>
-          <boxGeometry args={[length / 2 - DOOR.half, H, 0.4]} />
+      {pieces.map((p) => (
+        <mesh key={p.x} position={[p.x, H / 2, 0]}>
+          <boxGeometry args={[p.w, H, 0.4]} />
           <meshStandardMaterial color={WALL} roughness={0.95} />
         </mesh>
       ))}
@@ -104,9 +113,9 @@ function WallWithDoor({ length }: { length: number }) {
         <meshStandardMaterial color={TRIM} roughness={0.5} metalness={0.5} />
       </mesh>
       {/* Skirting. */}
-      {[-1, 1].map((s) => (
-        <mesh key={`k${s}`} position={[s * side, 0.09, 0.21]}>
-          <boxGeometry args={[length / 2 - DOOR.half, 0.18, 0.04]} />
+      {pieces.map((p) => (
+        <mesh key={`k${p.x}`} position={[p.x, 0.09, 0.21]}>
+          <boxGeometry args={[p.w, 0.18, 0.04]} />
           <meshStandardMaterial color="#0f0d0b" />
         </mesh>
       ))}
@@ -152,19 +161,19 @@ function Foyer() {
           <meshBasicMaterial color="#e9dfcc" toneMapped={false} />
         </mesh>
       ))}
-      {/* Side walls. */}
-      {[-1, 1].map((side) => (
-        <group key={side}>
-          <mesh position={[side * W, H / 2, sideMid]} rotation-y={side === -1 ? Math.PI / 2 : -Math.PI / 2}>
-            <planeGeometry args={[sideLength, H]} />
-            <meshStandardMaterial color={WALL} roughness={0.95} />
-          </mesh>
-          <mesh position={[side * (W - 0.02), 0.09, sideMid]}>
-            <boxGeometry args={[0.04, 0.18, sideLength]} />
-            <meshStandardMaterial color="#0f0d0b" />
-          </mesh>
-        </group>
-      ))}
+      {/* The left wall, plain; the right one opens onto the taste room. */}
+      <mesh position={[-W, H / 2, sideMid]} rotation-y={Math.PI / 2}>
+        <planeGeometry args={[sideLength, H]} />
+        <meshStandardMaterial color={WALL} roughness={0.95} />
+      </mesh>
+      <mesh position={[-(W - 0.02), 0.09, sideMid]}>
+        <boxGeometry args={[0.04, 0.18, sideLength]} />
+        <meshStandardMaterial color="#0f0d0b" />
+      </mesh>
+      <group position={[TASTE_DOOR.x, 0, TASTE_DOOR.z]} rotation-y={TASTE_DOOR.angle}>
+        {/* Facing into the foyer, the visitor's left runs toward the apse, the right toward the entrance. */}
+        <WallWithDoor length={sideLength} before={TASTE_DOOR.z - (BACK + (W - APSE))} after={FRONT - TASTE_DOOR.z} />
+      </group>
       {/* The far wall and the two angled walls, each with its doorway. */}
       {DOORS.map((d, i) => (
         <group key={i} position={[d.x, 0, d.z]} rotation-y={d.angle}>
@@ -242,7 +251,7 @@ function Bay({ ex, index, onEnter }: { ex: Exhibition; index: number; onEnter: (
             { text: "Guided tours", font: "sans", size: 0.09, tracking: 0.3, caps: true, color: "#cdb88c", weight: 600 },
             { text: "Where shall we begin?", font: "serif", size: 0.46, lineHeight: 1.08, gap: 0.1 },
             {
-              text: "Three exhibitions, one after another through history. Choose a doorway and go in; each ends where the next begins.",
+              text: "Three exhibitions, one after another through history, and a room that learns your taste. Choose a doorway and go in.",
               font: "sans",
               size: 0.1,
               lineHeight: 1.5,
@@ -252,6 +261,65 @@ function Bay({ ex, index, onEnter }: { ex: Exhibition; index: number; onEnter: (
           ]}
         />
       )}
+    </group>
+  );
+}
+
+/** The taste room's doorway: its lettering above, and the way in. */
+function TasteBay({ onEnter }: { onEnter: () => void }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <group position={[TASTE_DOOR.x, 0, TASTE_DOOR.z]} rotation-y={TASTE_DOOR.angle}>
+      <WallText
+        width={3.6}
+        height={2.9}
+        position={[0, 5.3, 0.21]}
+        align="center"
+        color="#efe9dc"
+        onClick={onEnter}
+        lines={[
+          { text: "Find your taste", font: "sans", size: 0.085, tracking: 0.24, caps: true, color: "#cdb88c", weight: 600 },
+          { text: "The Taste Room", font: "serif-italic", size: 0.44, lineHeight: 1.05, gap: 0.08 },
+          {
+            text: "Two works at a time. Choose the one you would rather live with, and the museum learns what you love.",
+            font: "sans",
+            size: 0.108,
+            lineHeight: 1.5,
+            gap: 0.14,
+            opacity: 0.88,
+          },
+          { text: "No right answers · stay as long as you like", font: "sans", size: 0.07, tracking: 0.14, caps: true, gap: 0.14, opacity: 0.6 },
+        ]}
+      />
+      <mesh
+        position={[0, DOOR.height / 2, 0]}
+        onClick={(e) => {
+          e.stopPropagation();
+          onEnter();
+        }}
+        onPointerOver={() => {
+          setHover(true);
+          document.body.style.cursor = "pointer";
+        }}
+        onPointerOut={() => {
+          setHover(false);
+          document.body.style.cursor = "";
+        }}
+      >
+        <planeGeometry args={[DOOR.half * 2, DOOR.height]} />
+        <meshBasicMaterial color="#fff4e0" transparent opacity={hover ? 0.05 : 0} depthWrite={false} />
+      </mesh>
+      <WallText
+        width={2.4}
+        height={0.4}
+        position={[0, 0.6, 0.25]}
+        align="center"
+        valign="middle"
+        color="#efe9dc"
+        plate={{ stroke: "rgba(239,233,220,0.85)", fill: "rgba(11,10,9,0.55)" }}
+        onClick={onEnter}
+        lines={[{ text: "Enter the taste room", font: "sans", size: 0.11, tracking: 0.16, caps: true, weight: 550 }]}
+      />
     </group>
   );
 }
@@ -282,7 +350,9 @@ function SideWalls({ items }: { items: Exhibition[] }) {
     if (i === 1) return;
     const side: -1 | 1 = i === 0 ? -1 : 1;
     rest.forEach((id, j) => {
-      hung.push(fitted(id, [side * (W - 0.03), 2.3, [-1.5, 5][j]], side === -1 ? Math.PI / 2 : -Math.PI / 2, side, 2, 2.6));
+      // On the right wall, clear of the taste room's doorway.
+      const z = side === -1 ? [-1.5, 5][j] : [5.5, 12.5][j];
+      hung.push(fitted(id, [side * (W - 0.03), 2.3, z], side === -1 ? Math.PI / 2 : -Math.PI / 2, side, 2, 2.6));
     });
   });
   return (

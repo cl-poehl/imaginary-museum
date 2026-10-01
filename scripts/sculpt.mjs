@@ -21,6 +21,13 @@ const COLOR_MAX = 1024;
 env.cacheDir = path.join(CACHE, "models");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Photographs that show more than the object: the part to keep once it's cut out (left,
+// top, right, bottom, as fractions). The cut-out itself sees the whole photograph, which
+// helps it tell the object from its surroundings.
+const CROP = {
+  "ishtar-gate": [0.113, 0.088, 0.816, 0.893], // the gate alone, without the hall's side walls
+};
+
 const famous = JSON.parse(fs.readFileSync(path.join(DATA, "famous.json"), "utf8"));
 const only = new Set(process.argv.slice(2));
 const works = famous.artworks.filter((w) => (w.kind === "sculpture" || w.kind === "object") && (!only.size || only.has(w.id)));
@@ -51,12 +58,20 @@ for (const w of works) {
   // Work at a moderate size: plenty for a texture, quick for the model.
   const input = await sharp(file).rotate().resize({ width: 1280, height: 1280, fit: "inside" }).removeAlpha().png().toBuffer();
   const image = await RawImage.fromBlob(new Blob([input]));
-  const { width: W, height: H } = image;
 
   const out = await cutout(image);
   const masked = Array.isArray(out) ? out[0] : out; // RGBA, alpha is the object
+  let W = image.width;
+  let H = image.height;
+  let rgba = masked.data;
+  if (CROP[w.id]) {
+    const [l, t, r, b] = CROP[w.id];
+    const region = { left: Math.round(l * W), top: Math.round(t * H), width: Math.round((r - l) * W), height: Math.round((b - t) * H) };
+    rgba = await sharp(Buffer.from(rgba), { raw: { width: W, height: H, channels: 4 } }).extract(region).raw().toBuffer();
+    W = region.width;
+    H = region.height;
+  }
 
-  const rgba = masked.data;
   const alpha = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) alpha[i] = rgba[i * 4 + 3];
 

@@ -32,6 +32,8 @@ const TITLE_OVERRIDES = { "the-massacre-at-chios": "The Massacre at Chios" };
 const IMAGE_OVERRIDES = {
   // The research image was the Royal Ontario Museum's cast; this is the original in Cairo, serpopard side.
   "narmer-palette": "The Narmer Palette, early First Dynasty, ca. 3000 BCE; Egyptian Museum, Cairo (2).jpg",
+  // The research image was an oblique, crowded view of half the gate; this shows it whole and straight on.
+  "ishtar-gate": "Ishtar gate in Pergamon museum in Berlin..jpg",
 };
 async function commonsImage(file) {
   const q = `https://commons.wikimedia.org/w/api.php?action=query&format=json&formatversion=2&prop=imageinfo&iiprop=url|size&iiurlwidth=1280&titles=${encodeURIComponent("File:" + file)}`;

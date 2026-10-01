@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { getArtist, getArtwork, getMovement, yearLabel } from "@/data";
 import { nicheFor } from "@/lib/display";
+import { QUALITY } from "@/lib/quality";
 import { HALL, type Hung, type Layout, type Panel, type Pose, type Vec3 } from "@/lib/museum-layout";
 import type { Tour } from "@/lib/tour";
 import { CutOutWork, FrameReflections, FramedWork } from "./Exhibit3D";
@@ -83,11 +84,13 @@ export function Daylight() {
  */
 export function ExhibitionHall({ layout, offset, reflect, ...props }: MuseumProps & { layout: Layout; offset: Vec3; reflect: boolean }) {
   const hereZ = layout.stations[Math.max(0, props.index)]?.frame.centre[2] ?? 0;
+  // On a phone, a hall seen only through its doorway is just its rooms and first lettering.
+  const glimpse = QUALITY.lite && props.index < 0;
   return (
     <group position={offset}>
-      <Hall layout={layout} tour={props.tour} hereZ={hereZ} reflect={reflect} />
-      <Pictures layout={layout} {...props} hereZ={hereZ} />
-      <WallTexts layout={layout} {...props} hereZ={hereZ} />
+      <Hall layout={layout} tour={props.tour} hereZ={hereZ} reflect={reflect && QUALITY.reflect} />
+      {!glimpse && <Pictures layout={layout} {...props} hereZ={hereZ} />}
+      <WallTexts layout={layout} {...props} hereZ={hereZ} radius={glimpse ? 15 : QUALITY.texts} />
     </group>
   );
 }
@@ -261,6 +264,9 @@ function Pictures({ layout, tour, index, answers, onAnswer, onToggleClose, hereZ
   return (
     <group>
       {layout.hung.map((h) => {
+        // Pictures far down the hall are let go (and their images with them) until you come back.
+        const distance = Math.abs(h.pos[2] - hereZ);
+        if (distance > QUALITY.keep) return null;
         const isActive = active.has(h.id);
         const { ink, accent } = inkFor(tour, h.room);
         // In a three-work test the pictures are the answers; after answering, each is named.
@@ -273,7 +279,7 @@ function Pictures({ layout, tour, index, answers, onAnswer, onToggleClose, hereZ
           <Picture
             key={`${h.id}-${h.pos[2]}`}
             hung={h}
-            load={Math.abs(h.pos[2] - hereZ) < 30}
+            load={distance < QUALITY.near}
             onClick={onClick}
             label={label}
             portrait={layout.portrait}
@@ -303,7 +309,7 @@ export function Picture({
 
   useEffect(() => {
     if (!framed || !load || texture) return;
-    const src = art.image.src.includes("/1280px-") ? art.image.src.replace("/1280px-", "/1920px-") : art.image.src;
+    const src = art.image.src.includes("/1280px-") ? art.image.src.replace("/1280px-", QUALITY.image) : art.image.src;
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin("anonymous");
     let alive = true;
@@ -313,12 +319,14 @@ export function Picture({
       t.anisotropy = 8;
       setTexture(t);
     };
-    // Fall back to the 1280px rendition if the larger one doesn't exist.
+    // Fall back to the 1280px rendition if the asked-for one doesn't exist.
     loader.load(src, done, undefined, () => loader.load(art.image.src, done));
     return () => {
       alive = false;
     };
   }, [framed, load, texture, art.image.src]);
+  // Free the image's memory when the picture is let go.
+  useEffect(() => () => texture?.dispose(), [texture]);
 
   const { width: w, height: h } = hung;
   const pointer = usePointerCursor(Boolean(onClick));
@@ -477,7 +485,7 @@ function paint(o: {
   padding: number;
 }) {
   // Enough pixels per metre to stay crisp at reading distance, within texture limits.
-  const ppm = Math.min(760, 4096 / Math.max(o.width, o.height));
+  const ppm = Math.min(QUALITY.ppm, 4096 / Math.max(o.width, o.height));
   const c = document.createElement("canvas");
   c.width = Math.round(o.width * ppm);
   c.height = Math.round(o.height * ppm);
@@ -574,16 +582,22 @@ function paint(o: {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
+  // Once the lettering is on the graphics card the canvas isn't needed: free its memory
+  // (browsers, iOS Safari especially, cap the total memory a page's canvases may use).
+  t.onUpdate = () => {
+    c.width = c.height = 0;
+    t.onUpdate = null;
+  };
   return t;
 }
 
 /** All the lettering near the visitor. */
-function WallTexts(props: MuseumProps & { layout: Layout; hereZ: number }) {
+function WallTexts({ radius, ...props }: MuseumProps & { layout: Layout; hereZ: number; radius: number }) {
   const { layout, hereZ } = props;
   return (
     <group>
       {layout.panels
-        .filter((p) => Math.abs(p.pos[2] - hereZ) < 40)
+        .filter((p) => Math.abs(p.pos[2] - hereZ) < radius)
         .map((p) => (
           <group key={`${p.kind}-${p.room}-${p.step ?? ""}-${p.id ?? ""}-${p.pos[2]}`} position={p.pos} rotation-y={p.rotY}>
             <PanelText panel={p} {...props} />

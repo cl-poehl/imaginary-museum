@@ -381,6 +381,8 @@ export function CutOutWork({ hung, load }: { hung: Hung; load: boolean }) {
       alive = false;
     };
   }, [load, texture, id]);
+  // Free the image's memory when the work is let go.
+  useEffect(() => () => texture?.dispose(), [texture]);
 
   const floor = -H / 2;
   const baseH = 0.07;

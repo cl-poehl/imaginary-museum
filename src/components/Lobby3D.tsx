@@ -10,6 +10,7 @@ import { MeshReflectorMaterial } from "@react-three/drei";
 import { useMemo, useState } from "react";
 import * as THREE from "three";
 import { displayFor } from "@/lib/display";
+import { QUALITY } from "@/lib/quality";
 import type { Exhibition } from "@/lib/exhibitions";
 import type { Frame, Hung, Pose, Vec3 } from "@/lib/museum-layout";
 import { HALL } from "@/lib/museum-layout";
@@ -122,19 +123,24 @@ function Foyer() {
   return (
     <group>
       <mesh rotation-x={-Math.PI / 2} geometry={floor}>
-        <MeshReflectorMaterial
-          resolution={512}
-          blur={[400, 120]}
-          mixBlur={1}
-          mixStrength={18}
-          roughness={0.9}
-          depthScale={1}
-          minDepthThreshold={0.5}
-          maxDepthThreshold={1.3}
-          color="#241a13"
-          metalness={0.4}
-          mirror={0.4}
-        />
+        {/* Mirror-like where the device can afford it (it draws the scene twice). */}
+        {QUALITY.reflect ? (
+          <MeshReflectorMaterial
+            resolution={512}
+            blur={[400, 120]}
+            mixBlur={1}
+            mixStrength={18}
+            roughness={0.9}
+            depthScale={1}
+            minDepthThreshold={0.5}
+            maxDepthThreshold={1.3}
+            color="#241a13"
+            metalness={0.4}
+            mirror={0.4}
+          />
+        ) : (
+          <meshStandardMaterial color="#241a13" roughness={0.6} metalness={0.2} />
+        )}
       </mesh>
       <mesh rotation-x={Math.PI / 2} position={[0, H, 0]} geometry={ceiling}>
         <meshStandardMaterial color="#26241f" />

@@ -14,6 +14,7 @@ import { useCallback, useMemo } from "react";
 import * as THREE from "three";
 import type { Exhibition } from "@/lib/exhibitions";
 import { HALL, framePose, layoutTour, type Layout, type Pose, type Vec3 } from "@/lib/museum-layout";
+import { QUALITY } from "@/lib/quality";
 import type { Tour } from "@/lib/tour";
 import { BAY, DOORS, LOBBY_BOUNDS, LOBBY_START, Lobby, OVERVIEW } from "./Lobby3D";
 import { Daylight, ExhibitionHall, GlideTo, fovFor, waypoints, type Door, type MuseumProps } from "./Museum3D";
@@ -37,7 +38,13 @@ export type WorldProps = Omit<MuseumProps, "tour" | "index" | "next" | "onLobby"
 
 export function World3D(props: WorldProps) {
   return (
-    <Canvas className="!absolute inset-0" dpr={[1, 2]} flat gl={{ antialias: true }} camera={{ fov: 50, near: 0.05, far: 260 }}>
+    <Canvas
+      className="!absolute inset-0"
+      dpr={[1, QUALITY.dpr]}
+      flat
+      gl={{ antialias: !QUALITY.lite, powerPreference: "high-performance" }}
+      camera={{ fov: 50, near: 0.05, far: 260 }}
+    >
       <Daylight />
       <Scene {...props} />
     </Canvas>

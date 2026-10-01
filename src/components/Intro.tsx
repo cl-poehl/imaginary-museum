@@ -5,9 +5,9 @@ import { useEffect } from "react";
 import { artworks } from "@/data";
 
 const STEPS: [string, string][] = [
-  ["Choose", "Two works hang side by side. Pick the one you would rather live with: click it, or use ← and →."],
-  ["Both, neither, skip", "Love both? Press ↑. Neither? ↓. Can't decide? Space. Each answer teaches your curator something different."],
-  ["Look closer", "Labels (I) show the full wall text. Full screen (F) leaves only the works. Save anything you'd hang at home."],
+  ["Choose", "Two works hang together. Pick the one you would rather live with: tap or click it, or use ← and → on a keyboard."],
+  ["Both, neither, skip", "Love both, or neither? Say so with the buttons below them (↑ and ↓). Can't decide? Skip (Space). Each answer teaches your curator something different."],
+  ["Look closer", "Labels show the full wall text, and Full screen leaves only the works (I and F on a keyboard). Save anything you'd hang at home."],
   ["Your taste", "After a few picks your curator reads your taste and suggests works you haven't seen yet."],
 ];
 

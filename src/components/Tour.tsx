@@ -138,15 +138,16 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
       />
 
       {/* A whisper of interface: where you are, and the way out. */}
-      <div className="label pointer-events-none absolute inset-x-0 top-0 z-30 flex h-9 items-center justify-between bg-gradient-to-b from-black/60 to-transparent px-5 text-white/45 md:px-8">
-        <span>
+      <div className="label pointer-events-none absolute inset-x-0 top-0 z-30 flex h-9 items-center justify-between gap-4 bg-gradient-to-b from-black/60 to-transparent px-5 whitespace-nowrap text-white/45 md:px-8">
+        {/* On a narrow screen the room's name gives way first. */}
+        <span className="min-w-0 truncate">
           <span className="font-serif text-[14px] tracking-normal text-white/80 normal-case">Pendant</span>
           <span className="ml-3">
             {tour ? tour.title : "Guided tours"}
-            {room && <span className="text-white/30"> · {room.info.name}</span>}
+            {room && <span className="text-white/30 max-md:hidden"> · {room.info.name}</span>}
           </span>
         </span>
-        <span className="pointer-events-auto flex gap-5">
+        <span className="pointer-events-auto flex shrink-0 gap-5">
           <button onClick={toggleFullscreen} className="transition-colors hover:text-white max-md:hidden">
             Full screen <span className="text-white/30">F</span>
           </button>

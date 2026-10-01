@@ -1,26 +1,157 @@
 @import "tailwindcss";
 
+/* One theme: a quiet gallery. Charcoal walls, soft light, small labels. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+  --bg: #0b0b0a;
+  --wall: #121211;
+  --panel: #161615;
+  --fg: #ece8df;
+  --muted: #9b968c;
+  --faint: #5d5a54;
+  --line: rgb(255 255 255 / 0.07);
+  --accent: #c2ae86;
+  --accent-soft: rgb(194 174 134 / 0.1);
+  /* The AI's colour: a muted brass, never a rainbow. */
+  --aurora: linear-gradient(100deg, #d9c9a3 0%, #b39f78 100%);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg: var(--bg);
+  --color-wall: var(--wall);
+  --color-panel: var(--panel);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-instrument-serif);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--bg);
+  color: var(--fg);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  background: var(--bg);
+}
+
+/* Film grain over everything, very faint. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+::selection {
+  background: rgb(194 174 134 / 0.3);
+}
+
+.label {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.link {
+  text-decoration: underline;
+  text-decoration-color: rgb(255 255 255 / 0.18);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 150ms, color 150ms;
+}
+.link:hover {
+  text-decoration-color: currentColor;
+}
+
+/* Anything the AI says or does wears the aurora. */
+.aurora-text {
+  background: var(--aurora);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.aurora-bg {
+  background: var(--aurora);
+}
+.aurora-border {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    var(--aurora) border-box;
+}
+
+@keyframes orb {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+.orb {
+  background: radial-gradient(circle at 35% 30%, #efe3c6, #b39f78 55%, #6f6248 100%);
+  animation: orb 12s linear infinite;
+}
+.orb-thinking {
+  animation-duration: 1.4s;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
+}
+.pulse-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.rise {
+  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes reveal {
+  from { opacity: 0; transform: scale(0.985); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+.reveal {
+  animation: reveal 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.05), transparent) var(--wall);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot, .rise, .reveal, .orb, .shimmer { animation: none; }
+}
+
+/* Header height, and a true fullscreen mode that removes it. */
+:root {
+  --header-h: 2.5rem;
+}
+:root:fullscreen {
+  --header-h: 0px;
+}
+:root:fullscreen .site-header {
+  display: none;
 }

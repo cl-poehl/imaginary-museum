@@ -1,0 +1,7 @@
+# Not part of the site: models and photos cached by the data scripts (over 1 GB),
+# local secrets, build output and editor settings.
+scripts/.cache
+.env*
+.next
+node_modules
+.claude

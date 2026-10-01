@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Pendant
 
-## Getting Started
+An AI museum of taste. Two works at a time; pick the one you prefer, and your curator learns what you're drawn to.
 
-First, run the development server:
+- `/` the duel: ← → choose, ↑ both, ↓ neither, space skip, U undo, I hide labels
+- `/works/[id]`, `/artists/[id]`, `/epochs/[id]` detail pages; `/epochs` timeline; `/artists` index
+- `/taste` your profile, the curator's read, predicted matches; `/collection` saved works and where to see them; `/shared?p=…` a shareable profile
+
+## How it works
+
+- **Collection** (`src/data`): 374 of the world's most famous public-domain artworks across 35 epochs, from Ice Age figurines to early abstraction. "Famous" is measured by how many Wikipedia language editions have an article about the work. The original 54 are hand-written (`artworks.ts`); the other 320 are in `famous.json`, each researched from its Wikipedia article and Wikidata before its label was written. Images come from Wikimedia Commons (public domain only; artists who died after 1955 are excluded).
+- **Taste model** (`src/lib/taste.ts`): Bradley–Terry over sparse features (traits, epoch, artist, century, medium) plus 16 PCA components of each work's CLIP image embedding. "Both", "neither" and saved works add absolute signals.
+- **Visual similarity** (`src/lib/similar.ts`): cosine over 512-d CLIP embeddings, server-only.
+- **AI curator** (`src/app/api/curator`): Claude via the AI SDK, streaming. Needs `ANTHROPIC_API_KEY` in `.env.local`; without it the app falls back to templated text. Notes about works and artists are cached once per server; personal requests are rate-limited (20 per visitor per 10 minutes) and run at low effort.
+- **State** (`src/lib/store.ts`): localStorage via `useSyncExternalStore`. Shared profiles are encoded in the URL.
+
+## Data pipeline (`scripts/famous`)
+
+1. `01-rank.mjs` ranks artworks on Wikidata by number of Wikipedia languages.
+2. `02-select.mjs` picks the collection: public domain only, no monuments or photographs, max 8 works per artist, plus hand-picked world masterpieces.
+3. `03-research.mjs` saves each work's Wikipedia article, Wikidata facts and a verified image to `scripts/.cache/famous/research`.
+4. Labels and bios are written from that research following `WRITING_GUIDE.md`.
+5. `04-assemble.mjs` validates everything and writes `src/data/famous.json`.
+6. `node scripts/embed-images.mjs` computes CLIP embeddings for every work.
+
+`scripts/resolve-images.mjs` resolves images for the original 54. `scripts/archive/` holds the earlier Met/AIC importer.
+
+## Develop
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

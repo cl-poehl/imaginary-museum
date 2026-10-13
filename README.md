@@ -2,6 +2,8 @@
 
 A museum you walk through in 3D, and that learns your taste.
 
+**Visit it: [imaginary-museum.vercel.app](https://imaginary-museum.vercel.app)**
+
 The name is André Malraux's *musée imaginaire* (1947): the museum without walls that reproductions made possible, which each of us assembles for ourselves.
 
 - `/` the museum. From the entrance hall, three exhibitions run one after another through history (Ancient Worlds, The Old Masters, The Modern Eye), with a taste room through the right-hand wall and your own room through the left. Keys: → or space walk on, ← back, Z closer, M map, S sound, F full screen, Esc back to the entrance hall. Drag to look around, scroll or pinch to look closer, click any work to go to it. Links follow you: `/?route=old-masters&at=mona-lisa` opens at that work.
@@ -33,6 +35,7 @@ Then, for the museum:
 - `node scripts/host-images.mjs [id …]` downloads each work's image and writes the hosted copies (400, 960 and 1600px WebP) and `src/data/hosted.json`.
 - `node scripts/sculpt.mjs [id …]` cuts sculptures and objects out of their photographs for their cases.
 - `node scripts/audio-guide.mjs [--voice Daniel] [epoch …]` speaks the audio guide (macOS: `say` and `afconvert`).
+- `node scripts/credits.mjs` writes `CREDITS.md`, each image's source, author and licence.
 
 `scripts/resolve-images.mjs` resolves images for the original 54. `scripts/archive/` holds the earlier Met/AIC importer.
 
@@ -43,3 +46,10 @@ npm run dev
 ```
 
 Pushing to `main` deploys to Vercel.
+
+## Licence and credits
+
+The code is MIT licensed (`LICENSE`). The images are from Wikimedia Commons and keep their own licences: most are
+public domain, and the photographers of the rest are credited in [`CREDITS.md`](CREDITS.md) (regenerate it with
+`node scripts/credits.mjs`). The wall texts draw on Wikipedia (CC BY-SA 4.0) and Wikidata (CC0). The audio guide is
+spoken by macOS's speech synthesiser.

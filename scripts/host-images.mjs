@@ -17,7 +17,7 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..")
 const CACHE = path.join(ROOT, "scripts/.cache/img/host");
 const OUT = path.join(ROOT, "public/art");
 const DATA = path.join(ROOT, "src/data");
-const UA = "AIArtMuseum/0.1 (Pendant art museum data import; https://github.com/cl-poehl/imaginary-museum)";
+const UA = "AIArtMuseum/0.1 (The Imaginary Museum data import; https://github.com/cl-poehl/imaginary-museum)";
 const SIZES = [
   { box: 400, quality: 76 },
   { box: 960, quality: 76 },

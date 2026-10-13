@@ -1,6 +1,8 @@
-# Pendant
+# The Imaginary Museum
 
 A museum you walk through in 3D, and that learns your taste.
+
+The name is André Malraux's *musée imaginaire* (1947): the museum without walls that reproductions made possible, which each of us assembles for ourselves.
 
 - `/` the museum. From the entrance hall, three exhibitions run one after another through history (Ancient Worlds, The Old Masters, The Modern Eye), with a taste room through the right-hand wall and your own room through the left. Keys: → or space walk on, ← back, Z closer, M map, S sound, F full screen, Esc back to the entrance hall. Drag to look around, scroll or pinch to look closer, click any work to go to it. Links follow you: `/?route=old-masters&at=mona-lisa` opens at that work.
 - `/pairs` the same choosing as the taste room, on a page: ← → choose, ↑ both, ↓ neither, space skip, U undo

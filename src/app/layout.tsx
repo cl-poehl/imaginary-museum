@@ -14,8 +14,9 @@ const serif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Pendant", template: "%s · Pendant" },
-  description: "Two works of art at a time. Pick the one you prefer, and find the art that fits you.",
+  title: { default: "The Imaginary Museum", template: "%s · The Imaginary Museum" },
+  description:
+    "A museum you walk through in 3D, from Ice Age carvings to the first abstract paintings, that learns your taste and hangs a room for you.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -14,8 +14,8 @@ export function SiteHeader() {
     <header className="site-header sticky top-0 z-30 bg-bg/80 backdrop-blur-md">
       <div className="flex h-[var(--header-h)] items-center justify-between px-5 md:px-8">
         <Link href="/" className="flex items-baseline gap-3">
-          <span className="font-serif text-[17px] leading-none tracking-wide">Pendant</span>
-          <span className="label hidden text-faint md:inline">A museum of taste</span>
+          <span className="font-serif text-[17px] leading-none tracking-wide">The Imaginary Museum</span>
+          <span className="label hidden text-faint lg:inline">It learns your taste</span>
         </Link>
         <nav className="label flex items-center gap-5 text-muted md:gap-7">
           {NAV.map((n) => (

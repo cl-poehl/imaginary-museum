@@ -175,8 +175,8 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
   useEffect(() => {
     if (!tour) return;
     try {
-      if (window.localStorage.getItem("pendant:look-hint")) return;
-      window.localStorage.setItem("pendant:look-hint", "1");
+      if (window.localStorage.getItem("imaginary-museum:look-hint")) return;
+      window.localStorage.setItem("imaginary-museum:look-hint", "1");
     } catch {
       return;
     }
@@ -193,7 +193,7 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
   const share = useCallback(async () => {
     const url = window.location.href;
     try {
-      if (navigator.share) await navigator.share({ title: "Pendant", url });
+      if (navigator.share) await navigator.share({ title: "The Imaginary Museum", url });
       else {
         await navigator.clipboard.writeText(url);
         setToast("Link copied");
@@ -314,8 +314,11 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
       <div className="label pointer-events-none absolute inset-x-0 top-0 z-30 flex h-9 items-center justify-between gap-4 bg-gradient-to-b from-black/60 to-transparent px-5 whitespace-nowrap text-white/45 md:px-8">
         {/* On a narrow screen the room's name gives way first. */}
         <span className="min-w-0 truncate">
-          <span className="font-serif text-[14px] tracking-normal text-white/80 normal-case">Pendant</span>
-          <span className="ml-3">
+          <span className="font-serif text-[14px] tracking-normal text-white/80 normal-case">
+            <span className="max-md:hidden">The </span>Imaginary Museum
+          </span>
+          {/* On a phone there is only room for the museum's name. */}
+          <span className="ml-3 max-md:hidden">
             {tour ? tour.title : inTaste ? "The Taste Room" : "Entrance hall"}
             {room && <span className="text-white/30 max-md:hidden"> · {room.info.name}</span>}
           </span>
@@ -351,7 +354,8 @@ export function Tour({ only, seed: initialSeed = 1 }: { only?: string | null; se
               </Link>
             </>
           )}
-          <Link href="/taste" className="transition-colors hover:text-white">
+          {/* On a phone, in the map instead. */}
+          <Link href="/taste" className="transition-colors hover:text-white max-md:hidden">
             Your taste
           </Link>
         </span>

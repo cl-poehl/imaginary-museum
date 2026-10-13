@@ -166,9 +166,14 @@ export function MuseumMap({
           </div>
         )}
       </div>
-      <Link href="/privacy" className="label px-5 pt-2 pb-4 text-white/30 transition-colors hover:text-white">
-        Privacy
-      </Link>
+      <div className="label flex gap-5 px-5 pt-2 pb-4 text-white/30">
+        <Link href="/taste" className="transition-colors hover:text-white">
+          Your taste
+        </Link>
+        <Link href="/privacy" className="transition-colors hover:text-white">
+          Privacy
+        </Link>
+      </div>
     </div>
   );
 }

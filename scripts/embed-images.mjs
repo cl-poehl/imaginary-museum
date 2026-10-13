@@ -19,7 +19,7 @@ const DATA = path.join(ROOT, "src/data");
 const MODEL = "Xenova/clip-vit-base-patch32";
 const PCA_DIMS = 16;
 const BATCH = 16;
-const UA = "AIArtMuseum/0.1 (Pendant art museum data import; https://github.com/cl-poehl/imaginary-museum)";
+const UA = "AIArtMuseum/0.1 (The Imaginary Museum data import; https://github.com/cl-poehl/imaginary-museum)";
 
 env.cacheDir = path.join(CACHE, "models");
 

@@ -1,6 +1,6 @@
-# Writing guide for Pendant's collection notes
+# Writing guide for The Imaginary Museum's collection notes
 
-Pendant is an "AI museum of taste" for art lovers and art historians. Visitors see two famous works side by side and pick one. Under each work sits a short wall label. You are writing those labels.
+The Imaginary Museum is an "AI museum of taste" for art lovers and art historians. Visitors see two famous works side by side and pick one. Under each work sits a short wall label. You are writing those labels.
 
 ## Research first, then write
 For every work you are assigned, first read its research file:

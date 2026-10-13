@@ -25,7 +25,7 @@ const only = new Set(args);
 const year = (y) => (y < 0 ? `${Math.abs(y).toLocaleString("en-US")} B.C.` : String(y));
 
 function speak(text, file) {
-  const aiff = path.join(os.tmpdir(), `pendant-${path.basename(file)}.aiff`);
+  const aiff = path.join(os.tmpdir(), `imaginary-museum-${path.basename(file)}.aiff`);
   execFileSync("say", ["-v", VOICE, "-r", "172", "-o", aiff, text]);
   execFileSync("afconvert", ["-f", "m4af", "-d", "aac", "-b", "48000", "-c", "1", aiff, file]);
   fs.rmSync(aiff);

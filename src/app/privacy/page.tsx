@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy" };
 const SECTIONS: { title: string; body: React.ReactNode }[] = [
   {
     title: "No accounts, no cookies, no tracking",
-    body: "Pendant has no sign-in, sets no cookies and runs no analytics or advertising. Nobody follows you around the museum.",
+    body: "The Imaginary Museum has no sign-in, sets no cookies and runs no analytics or advertising. Nobody follows you around the museum.",
   },
   {
     title: "Your choices stay on your device",

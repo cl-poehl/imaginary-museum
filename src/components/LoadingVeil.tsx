@@ -13,7 +13,7 @@ export function Veil({ progress = 0, fading = false }: { progress?: number; fadi
       role="status"
       aria-label="Opening the museum"
     >
-      <p className="font-serif text-[28px] text-white/85">Pendant</p>
+      <p className="font-serif text-[28px] text-white/85">The Imaginary Museum</p>
       <div className="h-px w-40 bg-white/10">
         <div className="h-full bg-[#c2ae86] transition-[width] duration-500" style={{ width: `${Math.max(4, progress)}%` }} />
       </div>

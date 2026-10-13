@@ -18,7 +18,7 @@ process.removeAllListeners("warning");
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const CACHE = path.join(ROOT, "scripts/.cache");
 const OUT = path.join(ROOT, "src/data/imported.json");
-const UA = "AIArtMuseum/0.1 (Pendant art museum data import; https://github.com/cl-poehl/imaginary-museum)";
+const UA = "AIArtMuseum/0.1 (The Imaginary Museum data import; https://github.com/cl-poehl/imaginary-museum)";
 const AIC_UA = "AIArtMuseum (https://github.com/cl-poehl/imaginary-museum)";
 const AIC_API = "https://api.artic.edu/api/v1";
 const MET_API = "https://collectionapi.metmuseum.org/public/collection/v1";
